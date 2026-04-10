@@ -56,7 +56,7 @@ export function FeedItem({ item, isNew }: Props) {
   const member = members.find((m) => m.login === item.user);
   const color = member?.color || '#444';
   const avatarUrl = member?.avatarUrl;
-  const config = TYPE_CONFIG[item.type];
+  const config = TYPE_CONFIG[item.type] || { color: 'bg-blue', barColor: 'bg-blue', icon: '📋' };
   const isEpic = EPIC_TYPES.has(item.type);
   const initials = (member?.name || item.user)
     .split(' ')

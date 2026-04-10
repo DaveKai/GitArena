@@ -10,6 +10,7 @@ function getCtx(): AudioContext {
 
 function playTone(freq: number, duration: number, type: OscillatorType = 'sine', vol = 0.15, detune = 0) {
   const c = getCtx();
+  if (c.state === 'suspended') c.resume().catch(() => {});
   const osc = c.createOscillator();
   const gain = c.createGain();
   osc.type = type;

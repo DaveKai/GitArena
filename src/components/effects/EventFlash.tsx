@@ -17,26 +17,30 @@ const FLASH_COLORS: Record<string, string> = {
 export function EventFlash() {
   const feed = useStore((s) => s.feed);
   const [flash, setFlash] = useState<string | null>(null);
+  const [flashKey, setFlashKey] = useState(0);
   const lastFeedLen = useRef(feed.length);
 
   useEffect(() => {
-    if (feed.length > lastFeedLen.current && feed.length > 0) {
+    const prevLen = lastFeedLen.current;
+    lastFeedLen.current = feed.length;
+
+    if (feed.length > prevLen && feed.length > 0) {
       const latest = feed[0];
       if (latest) {
         const color = FLASH_COLORS[latest.type] || 'rgba(255,255,255,0.05)';
         setFlash(color);
+        setFlashKey((k) => k + 1);
         const t = setTimeout(() => setFlash(null), 400);
         return () => clearTimeout(t);
       }
     }
-    lastFeedLen.current = feed.length;
-  }, [feed]);
+  }, [feed.length]);
 
   return (
     <AnimatePresence>
       {flash && (
         <motion.div
-          key={flash + Date.now()}
+          key={flashKey}
           className="fixed inset-0 pointer-events-none z-40"
           style={{ background: flash }}
           initial={{ opacity: 1 }}
