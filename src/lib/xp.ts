@@ -1,4 +1,4 @@
-export const XP_VALUES = {
+export let XP_VALUES = {
   commit: 50,
   prOpened: 80,
   prMerged: 120,
@@ -10,7 +10,7 @@ export const XP_VALUES = {
   streakBonus: 200,
 };
 
-export const LEVELS = [
+export let LEVELS = [
   { level: 1, xp: 0,     title: 'intern'    },
   { level: 2, xp: 500,   title: 'junior'    },
   { level: 3, xp: 1500,  title: 'dev'       },
@@ -20,6 +20,11 @@ export const LEVELS = [
   { level: 7, xp: 16000, title: 'architect' },
   { level: 8, xp: 25000, title: 'legendary' },
 ];
+
+export function updateXpConfig(config: { xpValues: Record<string, number>; levels: Array<{ level: number; xp: number; title: string }> }) {
+  XP_VALUES = { ...XP_VALUES, ...config.xpValues };
+  LEVELS = config.levels;
+}
 
 export function getLevel(totalXp: number) {
   let current = LEVELS[0];
