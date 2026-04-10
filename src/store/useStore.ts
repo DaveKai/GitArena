@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { DevStats, FeedItem, Member, Belts, ShamePR } from '../types';
 import { CONFIG } from '../config';
-import { XP_VALUES, getLevel } from '../lib/xp';
+import { XP_VALUES, getLevel, updateXpConfig } from '../lib/xp';
 import { saveState, loadState } from '../lib/storage';
 import { monthStart, isBot } from '../lib/github';
 
@@ -69,6 +69,10 @@ interface AppState {
   checkWeeklyReset: () => void;
   persist: () => void;
   hydrate: () => void;
+  loadServerState: (data: Record<string, unknown>) => void;
+  applyServerFeed: (feedItem: FeedItem) => void;
+  applyServerOverlay: (overlay: { type: string; payload: Record<string, unknown> }) => void;
+  applyServerConfig: (config: { xpValues: Record<string, number>; levels: Array<{ level: number; xp: number; title: string }> }) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -364,6 +368,55 @@ export const useStore = create<AppState>((set, get) => ({
       weekStartDate: saved.weekStart,
       feed: (saved.feed || []) as FeedItem[],
     });
+  },
+
+  // ── Server-authoritative state ─────────────────
+  loadServerState: (data: Record<string, unknown>) => {
+    const d = data as {
+      members?: Member[];
+      stats?: Record<string, DevStats>;
+      feed?: FeedItem[];
+      bossProgress?: Record<string, number>;
+      bossIndex?: number;
+      previousRanks?: Record<string, number>;
+      belts?: Belts;
+      shamePRs?: ShamePR[];
+      weekStartDate?: string;
+      xpConfig?: { xpValues: Record<string, number>; levels: Array<{ level: number; xp: number; title: string }> };
+    };
+    const update: Partial<AppState> = {};
+    if (d.members) update.members = d.members;
+    if (d.stats) update.stats = d.stats;
+    if (d.feed) update.feed = d.feed;
+    if (d.bossProgress) update.bossProgress = d.bossProgress;
+    if (d.bossIndex !== undefined) update.bossIndex = d.bossIndex;
+    if (d.previousRanks) update.previousRanks = d.previousRanks;
+    if (d.belts) update.belts = d.belts;
+    if (d.shamePRs) update.shamePRs = d.shamePRs;
+    if (d.weekStartDate) update.weekStartDate = d.weekStartDate;
+    if (d.xpConfig) updateXpConfig(d.xpConfig);
+    set(update);
+  },
+
+  applyServerFeed: (feedItem: FeedItem) => {
+    const existing = get().feed;
+    if (existing.some(f => f.id === feedItem.id)) return;
+    const feed = [feedItem, ...existing]
+      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+      .slice(0, 50);
+    set({ feed });
+  },
+
+  applyServerOverlay: (overlay: { type: string; payload: Record<string, unknown> }) => {
+    const overlayQueue = [...get().overlayQueue];
+    if (overlayQueue.length < 5) {
+      overlayQueue.push(overlay);
+      set({ overlayQueue });
+    }
+  },
+
+  applyServerConfig: (config: { xpValues: Record<string, number>; levels: Array<{ level: number; xp: number; title: string }> }) => {
+    updateXpConfig(config);
   },
 }));
 

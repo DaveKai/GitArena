@@ -11,21 +11,12 @@ import { OvertakenPill } from './components/overlays/OvertakenPill';
 import { AchievementOverlay } from './components/overlays/AchievementOverlay';
 import { Particles } from './components/effects/Particles';
 import { EventFlash } from './components/effects/EventFlash';
-import { useGitHubPoller } from './hooks/useGitHubPoller';
-import { useFullSync } from './hooks/useFullSync';
+import { useBackendSync } from './hooks/useBackendSync';
 import { useDemoMode } from './hooks/useDemoMode';
-import { useOrgMembers } from './hooks/useOrgMembers';
 
 export default function App() {
-  const hydrate = useStore((s) => s.hydrate);
-  const checkWeeklyReset = useStore((s) => s.checkWeeklyReset);
   const overlayQueue = useStore((s) => s.overlayQueue);
   const popOverlay = useStore((s) => s.popOverlay);
-
-  useEffect(() => {
-    hydrate();
-    checkWeeklyReset();
-  }, [hydrate, checkWeeklyReset]);
 
   // Detect fullscreen and add brightness-compensation class
   useEffect(() => {
@@ -53,17 +44,8 @@ export default function App() {
     };
   }, []);
 
-  // Persist every 10s
-  const persist = useStore((s) => s.persist);
-  useEffect(() => {
-    const id = setInterval(persist, 10_000);
-    return () => clearInterval(id);
-  }, [persist]);
-
-  useGitHubPoller();
-  useFullSync();
+  useBackendSync();
   useDemoMode();
-  useOrgMembers();
 
   // Spotlight auto-rotate
   const nextSpotlight = useStore((s) => s.nextSpotlight);
