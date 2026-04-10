@@ -332,6 +332,34 @@ function bumpStreak(login: string): void {
   else if (s.streak >= 7 && !s.badges.includes('streakMaster')) awardBadge(login, 'streakMaster');
 }
 
+function addLineStats(login: string, added: number, deleted: number): void {
+  const s = state.stats[login];
+  if (!s) return;
+  s.weeklyLinesAdded += added;
+  s.weeklyLinesDeleted += deleted;
+}
+
+async function fetchPushLineStats(login: string, repo: string, before: string, head: string): Promise<void> {
+  try {
+    const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/compare/${before}...${head}`;
+    const { data, ok } = await ghFetch(url);
+    if (!ok || !data) return;
+    const d = data as Record<string, unknown>;
+    const files = d.files as Array<Record<string, unknown>> | undefined;
+    if (!files) return;
+    let added = 0;
+    let deleted = 0;
+    for (const f of files) {
+      added += (f.additions as number) || 0;
+      deleted += (f.deletions as number) || 0;
+    }
+    if (added || deleted) {
+      addLineStats(login, added, deleted);
+      broadcast('state', getClientState());
+    }
+  } catch { /* non-critical, skip */ }
+}
+
 // ── Monthly reset check ──────────────────────────
 function checkMonthlyReset(): void {
   const ms = monthStart();
@@ -379,6 +407,12 @@ function processEvent(event: Record<string, unknown>): void {
         incrementStat(actor, 'weeklyCommits', count);
         incrementStat(actor, 'dailyCommits', count);
         bumpStreak(actor);
+        // Fetch line stats via compare API
+        const before = payload.before as string;
+        const head = payload.head as string;
+        if (before && head && repo) {
+          fetchPushLineStats(actor, repo, before, head).catch(() => {});
+        }
       } else {
         addXp(actor, xp.commit, 'commit', repo, 'pushed code', undefined, eventTime);
         incrementStat(actor, 'weeklyCommits', 1);
@@ -405,6 +439,9 @@ function processEvent(event: Record<string, unknown>): void {
           seenIds.add(key);
           addXp(actor, xp.prOpened, 'pr-opened', repo, 'opened PR', title, eventTime);
           incrementStat(actor, 'weeklyPRsOpened');
+          const prAdd = (pr?.additions as number) || 0;
+          const prDel = (pr?.deletions as number) || 0;
+          if (prAdd || prDel) addLineStats(actor, prAdd, prDel);
         }
       } else if (action === 'closed' && pr?.merged) {
         const key = `rt-pr-merge-${repo}-${prNum}`;
@@ -412,6 +449,9 @@ function processEvent(event: Record<string, unknown>): void {
           seenIds.add(key);
           addXp(actor, xp.prMerged, 'pr-merged', repo, 'merged PR', title, eventTime);
           incrementStat(actor, 'weeklyPRsMerged');
+          const prAdd = (pr?.additions as number) || 0;
+          const prDel = (pr?.deletions as number) || 0;
+          if (prAdd || prDel) addLineStats(actor, prAdd, prDel);
         }
       }
       break;
@@ -617,6 +657,7 @@ async function fullSync(): Promise<void> {
     const prItems = (prData as Record<string, unknown>)?.items as unknown[] || [];
     const prDataByUser: Record<string, { opens: number; merges: number; avatarUrl: string }> = {};
     const prFeedRaw: Array<{ login: string; title: string; repo: string; time: string; merged: boolean }> = [];
+    const prDetailUrls: Array<{ login: string; url: string }> = [];
     for (const pr of prItems) {
       const p = pr as Record<string, unknown>;
       const login = (p.user as Record<string, string>)?.login;
@@ -632,6 +673,27 @@ async function fullSync(): Promise<void> {
       prDataByUser[login].opens++;
       if (merged) prDataByUser[login].merges++;
       prFeedRaw.push({ login, title, repo, time, merged });
+      const prUrl = (p.pull_request as Record<string, string>)?.url;
+      if (prUrl) prDetailUrls.push({ login, url: prUrl });
+    }
+
+    // Fetch PR details to get line stats (additions/deletions)
+    const linesByUser: Record<string, { added: number; deleted: number }> = {};
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < prDetailUrls.length; i += BATCH_SIZE) {
+      const batch = prDetailUrls.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(batch.map(({ url }) => ghFetch(url)));
+      for (let j = 0; j < batch.length; j++) {
+        const result = results[j];
+        if (result.status !== 'fulfilled' || !result.value.ok || !result.value.data) continue;
+        const prDetail = result.value.data as Record<string, unknown>;
+        const adds = (prDetail.additions as number) || 0;
+        const dels = (prDetail.deletions as number) || 0;
+        const login = batch[j].login;
+        if (!linesByUser[login]) linesByUser[login] = { added: 0, deleted: 0 };
+        linesByUser[login].added += adds;
+        linesByUser[login].deleted += dels;
+      }
     }
 
     // Issues closed
@@ -708,6 +770,11 @@ async function fullSync(): Promise<void> {
       if (prOpens > s.weeklyPRsOpened) s.weeklyPRsOpened = prOpens;
       if (prMerges > s.weeklyPRsMerged) s.weeklyPRsMerged = prMerges;
       if (issueCloses > s.weeklyIssuesClosed) s.weeklyIssuesClosed = issueCloses;
+      const lines = linesByUser[login];
+      if (lines) {
+        if (lines.added > s.weeklyLinesAdded) s.weeklyLinesAdded = lines.added;
+        if (lines.deleted > s.weeklyLinesDeleted) s.weeklyLinesDeleted = lines.deleted;
+      }
       state.stats[login] = s;
     }
 
