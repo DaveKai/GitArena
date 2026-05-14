@@ -14,6 +14,7 @@ export interface DevStats {
   weeklyPRsMerged: number;
   weeklyPRsReviewed: number;
   weeklyIssuesClosed: number;
+  weeklyIssuesOpened: number;
   weeklyLinesAdded: number;
   weeklyLinesDeleted: number;
   dailyCommits: number;

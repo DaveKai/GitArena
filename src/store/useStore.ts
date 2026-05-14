@@ -17,6 +17,7 @@ function emptyStats(login: string): DevStats {
     weeklyPRsMerged: 0,
     weeklyPRsReviewed: 0,
     weeklyIssuesClosed: 0,
+    weeklyIssuesOpened: 0,
     weeklyLinesAdded: 0,
     weeklyLinesDeleted: 0,
     dailyCommits: 0,
@@ -86,7 +87,7 @@ export const useStore = create<AppState>((set, get) => ({
   shamePRs: [],
   spotlightMode: 0,
   weekStartDate: monthStart(),
-  isDemo: CONFIG.pat === 'ghp_YOUR_PAT_HERE',
+  isDemo: typeof CONFIG.pat === 'string' && CONFIG.pat.trim().length > 0,
   overlayQueue: [],
 
   setMembers: (members) => {
@@ -333,6 +334,7 @@ export const useStore = create<AppState>((set, get) => ({
         s.weeklyPRsMerged = 0;
         s.weeklyPRsReviewed = 0;
         s.weeklyIssuesClosed = 0;
+        s.weeklyIssuesOpened = 0;
         s.weeklyLinesAdded = 0;
         s.weeklyLinesDeleted = 0;
         s.dailyCommits = 0;

@@ -44,6 +44,7 @@ interface DevStats {
   weeklyPRsMerged: number;
   weeklyPRsReviewed: number;
   weeklyIssuesClosed: number;
+  weeklyIssuesOpened: number;
   weeklyLinesAdded: number;
   weeklyLinesDeleted: number;
   dailyCommits: number;
@@ -94,6 +95,7 @@ const GH_PAT = process.env.GITARENA_PAT || '';
 const GH_ORG = process.env.GITARENA_ORG || '';
 const GH_REPOS = (process.env.GITARENA_REPOS || '').split(',').filter(Boolean);
 const PORT = parseInt(process.env.PORT || '3002', 10);
+const ADMIN_SECRET = process.env.GITARENA_ADMIN_SECRET || '';
 const BASE = 'https://api.github.com';
 
 if (!GH_PAT || !GH_ORG) {
@@ -123,7 +125,7 @@ function emptyStats(login: string): DevStats {
   return {
     login, weeklyXp: 0, totalXp: 0,
     weeklyCommits: 0, weeklyPRsOpened: 0, weeklyPRsMerged: 0,
-    weeklyPRsReviewed: 0, weeklyIssuesClosed: 0,
+    weeklyPRsReviewed: 0, weeklyIssuesClosed: 0, weeklyIssuesOpened: 0,
     weeklyLinesAdded: 0, weeklyLinesDeleted: 0,
     dailyCommits: 0, dailyIssuesClosed: 0,
     streak: 0, longestStreak: 0, streakLastDate: null,
@@ -142,7 +144,9 @@ function todayStr(): string {
 
 const BOT_LOGINS = new Set(['coderabbitai', 'copilot', 'dependabot[bot]', 'github-actions[bot]', 'renovate[bot]', 'codecov[bot]']);
 function isBot(login: string): boolean {
-  return BOT_LOGINS.has(login) || login.endsWith('[bot]') || login.endsWith('-bot');
+  if (!login) return false;
+  const lower = login.toLowerCase();
+  return BOT_LOGINS.has(lower) || lower.endsWith('[bot]') || lower.endsWith('-bot');
 }
 
 function loadServerState(): ServerState {
@@ -161,6 +165,10 @@ function loadServerState(): ServerState {
 }
 
 let state: ServerState = loadServerState();
+// Migration: ensure all loaded stats have new schema fields populated.
+for (const s of Object.values(state.stats)) {
+  if (typeof s.weeklyIssuesOpened !== 'number') s.weeklyIssuesOpened = 0;
+}
 const seenIds = new Set<string>(state.seenIds || []);
 
 function persistState(): void {
@@ -369,13 +377,16 @@ function checkMonthlyReset(): void {
       const s = state.stats[login];
       s.weeklyXp = 0; s.weeklyCommits = 0; s.weeklyPRsOpened = 0;
       s.weeklyPRsMerged = 0; s.weeklyPRsReviewed = 0; s.weeklyIssuesClosed = 0;
+      s.weeklyIssuesOpened = 0;
       s.weeklyLinesAdded = 0; s.weeklyLinesDeleted = 0;
       s.dailyCommits = 0; s.dailyIssuesClosed = 0;
     }
     state.weekStartDate = ms;
     state.bossProgress = {};
     state.previousRanks = {};
-    seenIds.clear();
+    // NOTE: do NOT clear seenIds here. Events from the new month are filtered by
+    // `eventTime < monthStart()` in processEvent; clearing seenIds would let any
+    // already-processed events get re-credited to totalXp.
     broadcast('reset', {});
   }
 }
@@ -477,6 +488,7 @@ function processEvent(event: Record<string, unknown>): void {
         if (!seenIds.has(key)) {
           seenIds.add(key);
           addXp(actor, xp.issueOpened, 'issue-opened', repo, 'opened issue', title, eventTime);
+          incrementStat(actor, 'weeklyIssuesOpened');
         }
       } else if (action === 'closed') {
         const key = `rt-issue-close-${repo}-${issueNum}`;
@@ -532,6 +544,7 @@ function processIssueOrPR(item: Record<string, unknown>, repo: string): void {
     if (!seenIds.has(openKey)) {
       seenIds.add(openKey);
       addXp(login, xp.issueOpened, 'issue-opened', repo, 'opened issue', title, createdAt);
+      incrementStat(login, 'weeklyIssuesOpened');
     }
     if (itemState === 'closed' && closedAt) {
       const closeKey = `rt-issue-close-${repo}-${item.number}`;
@@ -789,39 +802,38 @@ async function fullSync(): Promise<void> {
       const issueCloses = ic?.count || 0;
       const issueOpens = io?.count || 0;
 
-      const searchXp =
-        commits * xp.commit +
-        prOpens * xp.prOpened +
-        prMerges * xp.prMerged +
-        issueCloses * xp.issueClosed +
-        issueOpens * xp.issueOpened;
-
       const avatarUrl = c?.avatarUrl || p?.avatarUrl || ic?.avatarUrl || '';
       ensureMember(login, avatarUrl);
       const s = state.stats[login] || emptyStats(login);
 
-      // Compute how much XP the poller already tracked for searchable categories
-      const pollerSearchableXp =
-        s.weeklyCommits * xp.commit +
-        s.weeklyPRsOpened * xp.prOpened +
-        s.weeklyPRsMerged * xp.prMerged +
-        s.weeklyIssuesClosed * xp.issueClosed;
-      // pollerExtraXp = XP from non-searchable sources (reviews, streaks, branches)
-      const pollerExtraXp = Math.max(0, s.weeklyXp - pollerSearchableXp);
-
-      // Only update if search found more searchable XP than poller tracked
-      if (searchXp > pollerSearchableXp) {
-        const newTotal = searchXp + pollerExtraXp;
-        const delta = newTotal - s.weeklyXp;
-        if (delta > 0) {
-          s.weeklyXp = newTotal;
-          s.totalXp += delta;
+      // Per-category reconciliation: each search query may succeed or fail
+      // independently (rate limits, partial results), so credit each category
+      // on its own. Counters are monotonically increasing — search can only
+      // bump them upward — and weeklyXp/totalXp gain exactly the XP value of
+      // the new events. This keeps weeklyXp == sum(counter * xpValue) regardless
+      // of which queries returned, and is robust against double-counting because
+      // poller-credited events are already reflected in the existing counter.
+      let totalDelta = 0;
+      const bumpCategory = (searchCount: number, currentField: keyof DevStats, xpPerEvent: number) => {
+        const current = (s[currentField] as number) || 0;
+        if (searchCount > current) {
+          const eventDelta = searchCount - current;
+          (s as unknown as Record<string, number>)[currentField as string] = searchCount;
+          totalDelta += eventDelta * xpPerEvent;
         }
+      };
+      bumpCategory(commits, 'weeklyCommits', xp.commit);
+      bumpCategory(prOpens, 'weeklyPRsOpened', xp.prOpened);
+      bumpCategory(prMerges, 'weeklyPRsMerged', xp.prMerged);
+      bumpCategory(issueCloses, 'weeklyIssuesClosed', xp.issueClosed);
+      bumpCategory(issueOpens, 'weeklyIssuesOpened', xp.issueOpened);
+      if (totalDelta > 0) {
+        if (totalDelta > 5000) {
+          console.warn(`[server] Suspicious XP delta for ${login}: +${totalDelta} (search counts c=${commits} pO=${prOpens} pM=${prMerges} iC=${issueCloses} iO=${issueOpens})`);
+        }
+        s.weeklyXp += totalDelta;
+        s.totalXp += totalDelta;
       }
-      if (commits > s.weeklyCommits) s.weeklyCommits = commits;
-      if (prOpens > s.weeklyPRsOpened) s.weeklyPRsOpened = prOpens;
-      if (prMerges > s.weeklyPRsMerged) s.weeklyPRsMerged = prMerges;
-      if (issueCloses > s.weeklyIssuesClosed) s.weeklyIssuesClosed = issueCloses;
       const lines = linesByUser[login];
       if (lines) {
         if (lines.added > s.weeklyLinesAdded) s.weeklyLinesAdded = lines.added;
@@ -987,6 +999,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Admin-secret middleware — protects destructive endpoints.
+// If GITARENA_ADMIN_SECRET is set, the caller must supply the same value
+// in the X-Admin-Secret request header. Skipped when secret is not configured
+// (i.e. local development without the env var set).
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (!ADMIN_SECRET) { next(); return; }
+  const provided = req.headers['x-admin-secret'];
+  if (!provided || provided !== ADMIN_SECRET) {
+    res.status(403).json({ error: 'Forbidden: missing or invalid X-Admin-Secret header' });
+    return;
+  }
+  next();
+}
+
 // Full state snapshot
 app.get('/api/state', (_req, res) => {
   res.json(getClientState());
@@ -999,7 +1025,7 @@ app.get('/api/config', (_req, res) => {
 });
 
 // XP config (update)
-app.put('/api/config', (req, res) => {
+app.put('/api/config', requireAdmin, (req, res) => {
   try {
     const newConfig = req.body as XpConfig;
     // Basic validation
@@ -1018,7 +1044,7 @@ app.put('/api/config', (req, res) => {
 });
 
 // Force recalculate (wipe state and re-sync)
-app.post('/api/recalculate', async (_req, res) => {
+app.post('/api/recalculate', requireAdmin, async (_req, res) => {
   console.log('[server] Force recalculate requested');
   // Preserve members (avatars, colors) but reset XP
   for (const login of Object.keys(state.stats)) {
@@ -1030,6 +1056,92 @@ app.post('/api/recalculate', async (_req, res) => {
   seenIds.clear();
   await fullSync();
   res.json(getClientState());
+});
+
+// Non-destructive repair: deflates weeklyXp/totalXp by removing the inflation
+// from the issueOpened double-count bug, while preserving badges, streaks,
+// longestStreak, line stats, and the rest of totalXp history.
+app.post('/api/repair', requireAdmin, async (_req, res) => {
+  console.log('[server] Non-destructive repair requested');
+  const xp = xpConfig.xpValues;
+
+  // Snapshot weekly/total per user
+  const before: Record<string, { weekly: number; total: number }> = {};
+  for (const [login, s] of Object.entries(state.stats)) {
+    before[login] = { weekly: s.weeklyXp, total: s.totalXp };
+  }
+
+  // Sync counters from search (now includes weeklyIssuesOpened thanks to the fix).
+  // The safety cap on pollerExtraXp keeps any incidental weeklyXp drift bounded.
+  await fullSync();
+
+  // Now recompute canonical weeklyXp from the authoritative counters,
+  // and remove the inflation (oldWeekly - canonical) from totalXp.
+  const report: Array<{
+    login: string;
+    oldWeekly: number; newWeekly: number;
+    oldTotal: number; newTotal: number;
+    inflation: number;
+  }> = [];
+
+  for (const [login, s] of Object.entries(state.stats)) {
+    const canonical =
+      (s.weeklyCommits || 0) * xp.commit +
+      (s.weeklyPRsOpened || 0) * xp.prOpened +
+      (s.weeklyPRsMerged || 0) * xp.prMerged +
+      (s.weeklyPRsReviewed || 0) * xp.prReviewed +
+      (s.weeklyIssuesClosed || 0) * xp.issueClosed +
+      (s.weeklyIssuesOpened || 0) * xp.issueOpened;
+
+    // Allowance for non-searchable XP (branch creates + streak bonuses) on top
+    // of canonical. Don't deflate within this band — it may be legitimate.
+    const slack = 50 * (xp.firstCommit || 0) + 10 * (xp.streakBonus || 0);
+
+    const oldWeekly = before[login]?.weekly ?? s.weeklyXp;
+    const oldTotal = before[login]?.total ?? s.totalXp;
+
+    if (oldWeekly > canonical + slack) {
+      const inflation = oldWeekly - canonical;
+      s.weeklyXp = canonical;
+      s.totalXp = Math.max(canonical, oldTotal - inflation);
+      report.push({ login, oldWeekly, newWeekly: canonical, oldTotal, newTotal: s.totalXp, inflation });
+    } else if (oldWeekly < canonical) {
+      // Counters caught up but weeklyXp didn't (legacy partial-search drift).
+      // Bump weekly + total up by the missing amount.
+      const shortfall = canonical - oldWeekly;
+      s.weeklyXp = canonical;
+      s.totalXp = oldTotal + shortfall;
+      report.push({ login, oldWeekly, newWeekly: canonical, oldTotal, newTotal: s.totalXp, inflation: -shortfall });
+    } else {
+      // Leave weekly as-is (within slack), but make sure weekly never exceeds total
+      if (s.weeklyXp > s.totalXp) s.totalXp = s.weeklyXp;
+    }
+  }
+
+  // Drop bot accounts that may have been credited before isBot() was case-insensitive
+  const removedBots: string[] = [];
+  for (const login of Object.keys(state.stats)) {
+    if (isBot(login)) {
+      delete state.stats[login];
+      removedBots.push(login);
+    }
+  }
+  state.members = state.members.filter(m => !isBot(m.login));
+  if (removedBots.length) console.log(`[server] Removed bot accounts: ${removedBots.join(', ')}`);
+
+  // Recompute previousRanks based on the corrected weekly values
+  const ranked = rankedLogins();
+  const newPreviousRanks: Record<string, number> = {};
+  ranked.forEach((l, i) => { newPreviousRanks[l] = i + 1; });
+  state.previousRanks = newPreviousRanks;
+
+  persistState();
+  broadcast('state', getClientState());
+  console.log(`[server] Repair done. Adjusted ${report.length} users.`);
+  for (const r of report) {
+    console.log(`[server]   ${r.login}: weekly ${r.oldWeekly}→${r.newWeekly} (-${r.inflation}), total ${r.oldTotal}→${r.newTotal}`);
+  }
+  res.json({ ok: true, adjustments: report });
 });
 
 // SSE endpoint
@@ -1057,6 +1169,19 @@ app.get('/api/events', (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, clients: sseClients.length, seenIds: seenIds.size, repos: state.repos.length });
 });
+
+// ── Static frontend (production / Docker) ────────
+// When SERVE_STATIC=1 the backend serves the Vite build output.
+// In development the Vite dev server handles the frontend separately.
+if (process.env.SERVE_STATIC === '1') {
+  const distPath = path.join(__dirname, '..', 'dist');
+  app.use(express.static(distPath));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET') return next();
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // ── Start ────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {

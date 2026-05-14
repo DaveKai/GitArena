@@ -6,7 +6,6 @@ export let XP_VALUES = {
   issueClosed: 40,
   issueOpened: 20,
   firstCommit: 30,
-  netNegativePR: 70,
   streakBonus: 200,
 };
 

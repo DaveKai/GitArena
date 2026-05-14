@@ -3,13 +3,25 @@ import { useStore } from '../store/useStore';
 import { XP_VALUES } from '../lib/xp';
 import type { Member } from '../types';
 
+function buildDemoAvatar(name: string, color: string): string {
+  const initials = name
+    .split(' ')
+    .map((w) => w[0] || '')
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect width="128" height="128" rx="64" fill="${color}"/><text x="64" y="72" text-anchor="middle" font-family="monospace" font-size="44" fill="#0b0f14" font-weight="700">${initials}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 const DEMO_MEMBERS: Member[] = [
-  { login: 'alae',    name: 'Alae',    color: '#3b82f6', avatarUrl: '' },
-  { login: 'yassine', name: 'Yassine', color: '#a78bfa', avatarUrl: '' },
-  { login: 'mehdi',   name: 'Mehdi',   color: '#22c55e', avatarUrl: '' },
-  { login: 'sara',    name: 'Sara',    color: '#f59e0b', avatarUrl: '' },
-  { login: 'karim',   name: 'Karim',   color: '#ef4444', avatarUrl: '' },
-  { login: 'nadia',   name: 'Nadia',   color: '#14b8a6', avatarUrl: '' },
+  { login: 'alice',   name: 'Alice',   color: '#3b82f6', avatarUrl: buildDemoAvatar('Alice', '#3b82f6') },
+  { login: 'yassine', name: 'Yassine', color: '#a78bfa', avatarUrl: buildDemoAvatar('Yassine', '#a78bfa') },
+  { login: 'mehdi',   name: 'Mehdi',   color: '#22c55e', avatarUrl: buildDemoAvatar('Mehdi', '#22c55e') },
+  { login: 'sara',    name: 'Sara',    color: '#f59e0b', avatarUrl: buildDemoAvatar('Sara', '#f59e0b') },
+  { login: 'karim',   name: 'Karim',   color: '#ef4444', avatarUrl: buildDemoAvatar('Karim', '#ef4444') },
+  { login: 'nadia',   name: 'Nadia',   color: '#14b8a6', avatarUrl: buildDemoAvatar('Nadia', '#14b8a6') },
 ];
 
 const REPOS = ['7odor', 'api-server', 'frontend', 'mobile'];
@@ -84,7 +96,7 @@ export function useDemoMode() {
 
       // Seed each member with initial data
       const seedData: Record<string, { commits: number; prs: number; reviews: number; issues: number; xp: number; streak: number }> = {
-        alae:    { commits: 42, prs: 8, reviews: 12, issues: 6, xp: 3800, streak: 5 },
+        alice:   { commits: 42, prs: 8, reviews: 12, issues: 6, xp: 3800, streak: 5 },
         yassine: { commits: 35, prs: 6, reviews: 15, issues: 4, xp: 3200, streak: 3 },
         mehdi:   { commits: 28, prs: 5, reviews: 8,  issues: 7, xp: 2600, streak: 7 },
         sara:    { commits: 22, prs: 4, reviews: 10, issues: 3, xp: 2100, streak: 2 },
@@ -116,7 +128,7 @@ export function useDemoMode() {
       }
 
       // Seed badges
-      store.stats.alae.badges = ['earlyBird', 'quickDraw', 'streakMaster'];
+      store.stats.alice.badges = ['earlyBird', 'quickDraw', 'streakMaster'];
       store.stats.mehdi.badges = ['nightOwl', 'closer', 'ghostSlayer'];
       store.stats.yassine.badges = ['quickDraw', 'reviewerWeek'];
       store.stats.sara.badges = ['earlyBird'];
@@ -140,7 +152,7 @@ export function useDemoMode() {
       setBelts({
         reviewer: 'yassine',
         closer: 'mehdi',
-        speedKing: 'alae',
+        speedKing: 'alice',
       });
 
       // Seed feed
