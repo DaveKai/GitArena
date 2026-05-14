@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18-61dafb)](https://react.dev/)
 
-[**Live Demo →**](https://gitarena-demo.vercel.app) &nbsp;·&nbsp; [Report Bug](https://github.com/Societe-tangeroise-de-maintenance/GitArena/issues) &nbsp;·&nbsp; [Request Feature](https://github.com/Societe-tangeroise-de-maintenance/GitArena/issues)
+[**Live Demo →**](https://demo.gitarena.pro) &nbsp;·&nbsp; [Report Bug](https://github.com/Societe-tangeroise-de-maintenance/GitArena/issues) &nbsp;·&nbsp; [Request Feature](https://github.com/Societe-tangeroise-de-maintenance/GitArena/issues)
 
 </div>
 

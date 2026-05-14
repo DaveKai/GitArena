@@ -97,8 +97,9 @@ const GH_REPOS = (process.env.GITARENA_REPOS || '').split(',').filter(Boolean);
 const PORT = parseInt(process.env.PORT || '3002', 10);
 const ADMIN_SECRET = process.env.GITARENA_ADMIN_SECRET || '';
 const BASE = 'https://api.github.com';
+const DEMO_MODE = GH_PAT === 'demo';
 
-if (!GH_PAT || !GH_ORG) {
+if (!DEMO_MODE && (!GH_PAT || !GH_ORG)) {
   console.error('GITARENA_PAT and GITARENA_ORG environment variables are required');
   process.exit(1);
 }
@@ -1186,6 +1187,10 @@ if (process.env.SERVE_STATIC === '1') {
 // ── Start ────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[server] GitArena backend running on http://0.0.0.0:${PORT}`);
+  if (DEMO_MODE) {
+    console.log('[server] Running in DEMO mode — GitHub polling disabled');
+    return;
+  }
   console.log(`[server] Org: ${GH_ORG}, repos config: ${GH_REPOS.length > 0 ? GH_REPOS.join(', ') : 'auto-discover'}`);
 
   // Initial full sync then start polling
