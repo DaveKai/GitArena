@@ -37,13 +37,7 @@ GitArena polls your GitHub organisation every 10 seconds and turns every commit,
 
 All screenshots below were generated in demo mode with synthetic activity and fake avatars.
 
-### Desktop dashboard (1920x1080)
-
-![GitArena desktop dashboard](docs/screenshots/gitarena-dashboard-desktop.png)
-
-### Mobile view
-
-![GitArena mobile dashboard](docs/screenshots/gitarena-dashboard-mobile.png)
+![GitArena dashboard](docs/screenshots/gitarena-dashboard-desktop.png)
 
 ---
 
