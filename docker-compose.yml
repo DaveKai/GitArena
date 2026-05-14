@@ -1,0 +1,22 @@
+services:
+  gitarena:
+    build: .
+    ports:
+      - "3002:3002"
+    env_file:
+      - .env
+    environment:
+      SERVE_STATIC: "1"
+      NODE_ENV: production
+    volumes:
+      # Persist XP state across container restarts
+      - gitarena-data:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  gitarena-data:

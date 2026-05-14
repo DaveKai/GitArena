@@ -1,7 +1,28 @@
 {
   "name": "gitarena",
-  "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "A live gamification dashboard that turns GitHub org activity into a real-time leaderboard, streaks, badges, and boss fights — designed for the team TV screen.",
+  "author": "Alae Moudni",
+  "license": "MIT",
+  "homepage": "https://github.com/Societe-tangeroise-de-maintenance/GitArena",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Societe-tangeroise-de-maintenance/GitArena.git"
+  },
+  "keywords": [
+    "gamification",
+    "github",
+    "leaderboard",
+    "developer-tools",
+    "dashboard",
+    "real-time",
+    "react",
+    "typescript",
+    "tv-dashboard",
+    "boss-fight",
+    "streaks",
+    "open-source"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -28,7 +49,9 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.27",
+    "concurrently": "^9.2.1",
     "postcss": "^8.5.9",
+    "puppeteer-core": "^24.43.1",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0",

@@ -1,0 +1,46 @@
+name: Feature Request
+description: Suggest an idea or improvement for GitArena
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea? We'd love to hear it. Check the [Roadmap](../../ROADMAP.md) first to see if it's already planned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      placeholder: "Currently there's no way to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      placeholder: "It would be great if GitArena could..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: "I also considered..."
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - XP / scoring system
+        - UI / animations
+        - GitHub integration
+        - Self-hosting / Docker
+        - New badge or achievement
+        - New spotlight panel
+        - Documentation
+        - Other
+    validations:
+      required: true

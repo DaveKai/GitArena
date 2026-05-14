@@ -1,0 +1,49 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill in as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "XP for user X jumped from 500 to 50,000 after..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Configure org with ...
+        2. Wait for fullSync cycle ...
+        3. See XP value ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: "XP should have been..."
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: GitArena version / commit
+      placeholder: "e.g. main@abc1234"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant server logs
+      description: Paste any relevant output from `pm2 logs gitarena-backend`.
+      render: shell

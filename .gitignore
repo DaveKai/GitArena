@@ -2,7 +2,10 @@ node_modules/
 dist/
 src/config.ts
 server-state.json
+.github/SKILL.md
 *.local
 *.bak
 .env
 .env.*
+!.env.example
+tsconfig.tsbuildinfo

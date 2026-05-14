@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create src/config.ts from example
+        run: cp src/config.example.ts src/config.ts
+
+      - name: Check server TypeScript
+        run: npx tsc --noEmit -p server/tsconfig.json
+
+      - name: Check frontend TypeScript
+        run: npx tsc --noEmit
+
+  build:
+    name: Vite Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create src/config.ts from example
+        run: cp src/config.example.ts src/config.ts
+
+      - name: Build frontend
+        run: npm run build
