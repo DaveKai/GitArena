@@ -52,30 +52,14 @@ function Header({ isDemo, memberCount, now, periodStart, soundOn, onSound, onExp
 function Standings({ members, stats }: { members: Member[]; stats: Record<string, DevStats> }) {
   const sorted = useMemo(() => [...members].sort((a, b) => (stats[b.login]?.monthlyXp || 0) - (stats[a.login]?.monthlyXp || 0) || a.login.localeCompare(b.login)), [members, stats]);
   const rosterRef = useRef<HTMLDivElement>(null);
-  const tailRef = useRef<HTMLDivElement>(null);
   const tail = sorted.slice(3);
+  const [tailPage, setTailPage] = useState(0);
   const leadXp = sorted[0] ? stats[sorted[0].login]?.monthlyXp || 0 : 0;
   useEffect(() => {
-    const viewport = tailRef.current;
-    if (!viewport) return;
-    const firstRun = viewport.querySelector<HTMLElement>('.standings-tail-sequence');
-    const visibleCount = Math.min(2, tail.length);
-    const rowHeight = () => viewport.clientHeight / visibleCount;
-    const updateSize = () => viewport.style.setProperty('--tail-row-height', `${rowHeight()}px`);
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(viewport);
-    updateSize();
-    viewport.scrollTop = 0;
-    const wrap = () => {
-      const runHeight = firstRun?.getBoundingClientRect().height || 0;
-      if (tail.length > 2 && runHeight && viewport.scrollTop >= runHeight) viewport.scrollTop -= runHeight;
-    };
-    viewport.addEventListener('scroll', wrap, { passive: true });
-    const id = setInterval(() => {
-      if (tail.length <= 2) return;
-      viewport.scrollBy({ top: rowHeight(), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-    }, 4200);
-    return () => { clearInterval(id); viewport.removeEventListener('scroll', wrap); observer.disconnect(); };
+    setTailPage(0);
+    if (tail.length <= 2) return;
+    const id = setInterval(() => setTailPage(page => (page + 1) % Math.ceil(tail.length / 2)), 4800);
+    return () => clearInterval(id);
   }, [tail.length]);
   useEffect(() => {
     const rail = rosterRef.current;
@@ -108,7 +92,7 @@ function Standings({ members, stats }: { members: Member[]; stats: Record<string
   return <section className="arena-panel standings-panel"><div className="panel-heading"><div><span className="eyebrow">01 / THE COMPETITION</span><h1>THE STANDINGS<span className="title-dot">.</span></h1></div><span className="heading-aside">MONTHLY XP <span className="heading-count">{sorted.length.toString().padStart(2, '0')}</span></span></div>
     <div className="standings-list">{sorted.length === 0 && <div className="empty-state"><ArenaIcon name="users" size={36}/><strong>THE ARENA IS QUIET</strong><span>Activity will put your team on the board.</span></div>}
       {sorted.slice(0, 3).map((member, i) => standingRow(member, i))}
-      {tail.length > 0 && <div className="standings-tail" ref={tailRef} style={{ flex: `${Math.min(2, tail.length)} 0 ${48 * Math.min(2, tail.length)}px` }} aria-label="Ranks four and below, rotating automatically"><div className="standings-tail-sequence">{tail.map((member, i) => standingRow(member, i + 3))}</div>{tail.length > 2 && <div className="standings-tail-sequence" aria-hidden="true">{tail.map((member, i) => standingRow(member, i + 3, true))}</div>}</div>}</div>
+      {tail.length > 0 && <div className="standings-tail" style={{ flex: `${Math.min(2, tail.length)} 0 ${48 * Math.min(2, tail.length)}px` }} aria-label="Ranks four and below, rotating automatically"><AnimatePresence mode="wait" initial={false}><motion.div key={tailPage} className="standings-tail-page" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -18 }} transition={{ duration: 0.32, ease: 'easeInOut' }}>{Array.from({ length: Math.min(2, tail.length) }, (_, offset) => { const index = (tailPage * 2 + offset) % tail.length; return standingRow(tail[index], index + 3); })}</motion.div></AnimatePresence></div>}</div>
     {sorted.length > 0 && <div className="roster-section"><div className="roster-heading"><span>FULL ROSTER / {sorted.length} BUILDERS</span><span className="roster-heading-status">ROTATING RANKINGS ↗</span></div><div className="roster-rail" ref={rosterRef} aria-label="All ranked builders"><div className="roster-track"><div className="roster-sequence">{rosterCards(false)}</div><div className="roster-sequence" aria-hidden="true">{rosterCards(true)}</div></div></div></div>}
     <div className="standings-foot"><span>EVERY CONTRIBUTION COUNTS</span><span>RANKINGS UPDATE LIVE ↗</span></div>
   </section>;

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
+import { DEFAULT_SCORING, allocateXp, scoreDiff, type ChangedFile, type ScoringConfig } from './scoring.js';
 
 // ── Paths ────────────────────────────────────────
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,6 +33,8 @@ if (fs.existsSync(ENV_PATH)) {
 // ── Types ────────────────────────────────────────
 interface XpConfig {
   xpValues: Record<string, number>;
+  scoring?: ScoringConfig;
+  legacyXpValues?: { commit: number; prOpened: number; prMerged: number };
   levels: Array<{ level: number; xp: number; title: string }>;
   streakMilestones: number[];
   bossGoals: Array<{ label: string; metric: string; target: number }>;
@@ -95,6 +98,46 @@ interface ServerState {
   dailyStartDate?: string;
   etags: Record<string, string>;
   repos: string[];
+  scoringVersion?: number;
+  scoringEpoch?: string;
+  scoringHash?: string;
+  scoreLedger?: Record<string, ScoreLedgerEntry>;
+  commitDiffCache?: Record<string, DiffCacheEntry>;
+  prDiffCache?: Record<string, DiffCacheEntry>;
+  commitPrCache?: Record<string, boolean>;
+  defaultBranches?: Record<string, string>;
+}
+
+interface ScoreAward {
+  login: string;
+  month: string;
+  amount: number;
+  kind: 'code' | 'pr-opened' | 'pr-merged';
+  time: string;
+}
+
+interface ScoreLedgerEntry {
+  key: string;
+  repo: string;
+  title: string;
+  awards: Record<string, ScoreAward>;
+  lineAwards: Record<string, { login: string; month: string; added: number; deleted: number }>;
+  added: number;
+  deleted: number;
+  fileCount: number;
+  updatedAt: string;
+}
+
+interface DiffCacheEntry {
+  added: number;
+  deleted: number;
+  fileCount: number;
+  codeXp: number;
+  openXp: number;
+  mergeXp: number;
+  login?: string;
+  time?: string;
+  title?: string;
 }
 
 // ── GitHub config ────────────────────────────────
@@ -188,6 +231,8 @@ function loadServerState(): ServerState {
     belts: { reviewer: null, closer: null, speedKing: null },
     shamePRs: [], monthStartDate: monthStart(),
     seenIds: [], creditedCommitShas: [], commitLedgerSeeded: true, dailyStartDate: todayStr(), etags: {}, repos: [],
+    scoringVersion: 2, scoringEpoch: monthStart(),
+    scoreLedger: {}, commitDiffCache: {}, prDiffCache: {}, commitPrCache: {}, defaultBranches: {},
   };
 }
 
@@ -198,6 +243,17 @@ for (const s of Object.values(state.stats)) {
 }
 const seenIds = new Set<string>(state.seenIds || []);
 const creditedCommitShas = new Set<string>(state.creditedCommitShas || []);
+state.scoreLedger ||= {};
+state.commitDiffCache ||= {};
+state.prDiffCache ||= {};
+state.commitPrCache ||= {};
+state.defaultBranches ||= {};
+
+function scoringConfig(): ScoringConfig { return xpConfig.scoring || DEFAULT_SCORING; }
+function eventXpValues(): Record<string, number> {
+  return state.scoringVersion === 2 ? xpConfig.xpValues : { ...xpConfig.xpValues, ...xpConfig.legacyXpValues };
+}
+function awardMonth(time: string): string { return `${time.slice(0, 7)}-01`; }
 
 function persistState(): void {
   // Keep action IDs for the whole month; only transient GitHub event IDs expire.
@@ -295,6 +351,307 @@ async function searchAll(kind: 'commits' | 'issues', baseQuery: string, dateFiel
     items.push(...data.items as Array<Record<string, unknown>>);
   }
   return { items, complete: items.length >= count };
+}
+
+function scoreConfigHash(): string {
+  return createHash('sha256').update(JSON.stringify(scoringConfig())).digest('hex').slice(0, 12);
+}
+if (state.scoringVersion === 2 && !state.scoringHash && !Object.keys(state.scoreLedger || {}).length) state.scoringHash = scoreConfigHash();
+
+async function ghList(url: string, maxPages = 30): Promise<Array<Record<string, unknown>> | null> {
+  const items: Array<Record<string, unknown>> = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const separator = url.includes('?') ? '&' : '?';
+    const result = await ghFetch(`${url}${separator}per_page=100&page=${page}`);
+    if (!result.ok || !Array.isArray(result.data)) return null;
+    const batch = result.data as Array<Record<string, unknown>>;
+    items.push(...batch);
+    if (batch.length < 100) return items;
+  }
+  console.warn(`[server] GitHub list exceeded ${maxPages} pages: ${url}`);
+  return null;
+}
+
+async function getPrDiff(repo: string, number: number, headSha: string): Promise<DiffCacheEntry | null> {
+  const key = `${repo}#${number}:${headSha}:${scoreConfigHash()}`;
+  if (state.prDiffCache?.[key]) return state.prDiffCache[key];
+  const files = await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/pulls/${number}/files`);
+  if (!files) return null;
+  const diff = scoreDiff(files as ChangedFile[], scoringConfig());
+  const entry = { added: diff.added, deleted: diff.deleted, fileCount: diff.fileCount, codeXp: diff.codeXp, openXp: diff.openXp, mergeXp: diff.mergeXp };
+  state.prDiffCache![key] = entry;
+  return entry;
+}
+
+async function getCommitDiff(repo: string, sha: string): Promise<DiffCacheEntry | null> {
+  const key = `${repo}:${sha}:${scoreConfigHash()}`;
+  if (state.commitDiffCache?.[key]) return state.commitDiffCache[key];
+  const files: ChangedFile[] = [];
+  let first: Record<string, unknown> | null = null;
+  for (let page = 1; page <= 30; page++) {
+    const result = await ghFetch(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits/${sha}?per_page=100&page=${page}`);
+    if (!result.ok || !result.data) return null;
+    const data = result.data as Record<string, unknown>;
+    if (!first) first = data;
+    const batch = data.files as ChangedFile[] | undefined;
+    if (!Array.isArray(batch)) return null;
+    files.push(...batch);
+    if (batch.length < 100) break;
+    if (page === 30) return null;
+  }
+  const diff = scoreDiff(files, scoringConfig());
+  const commit = first?.commit as Record<string, unknown> | undefined;
+  const author = commit?.author as Record<string, string> | undefined;
+  const committer = commit?.committer as Record<string, string> | undefined;
+  const entry: DiffCacheEntry = {
+    added: diff.added, deleted: diff.deleted, fileCount: diff.fileCount,
+    codeXp: diff.codeXp, openXp: diff.openXp, mergeXp: diff.mergeXp,
+    login: (first?.author as Record<string, string> | undefined)?.login || (first?.committer as Record<string, string> | undefined)?.login,
+    time: committer?.date || author?.date,
+    title: ((commit?.message as string) || '').split('\n')[0],
+  };
+  state.commitDiffCache![key] = entry;
+  return entry;
+}
+
+function award(kind: ScoreAward['kind'], login: string, amount: number, time: string): ScoreAward {
+  return { kind, login, amount, time, month: awardMonth(time) };
+}
+
+async function getPrLedgerEntry(repo: string, number: number): Promise<ScoreLedgerEntry | null> {
+  const result = await ghFetch(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/pulls/${number}`);
+  if (!result.ok || !result.data) return null;
+  const pr = result.data as Record<string, unknown>;
+  const author = (pr.user as Record<string, string> | undefined)?.login || '';
+  const headSha = (pr.head as Record<string, string> | undefined)?.sha || '';
+  const createdAt = String(pr.created_at || '');
+  const mergedAt = String(pr.merged_at || '');
+  const merged = Boolean(mergedAt);
+  const active = pr.state === 'open' || merged;
+  const merger = (pr.merged_by as Record<string, string> | null)?.login || '';
+  if (!author || !headSha || !createdAt || (merged && !merger)) return null;
+  const diff = await getPrDiff(repo, number, headSha);
+  if (!diff) return null;
+  const awards: Record<string, ScoreAward> = {};
+  const lineAwards: ScoreLedgerEntry['lineAwards'] = {};
+  if (active && diff.fileCount) {
+    const commits = await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/pulls/${number}/commits`);
+    if (!commits) return null;
+    const weights: Record<string, number> = {};
+    const times: Record<string, string> = {};
+    for (const item of commits) {
+      const sha = String(item.sha || '');
+      if (!sha) return null;
+      const commitDiff = await getCommitDiff(repo, sha);
+      if (!commitDiff) return null;
+      const login = commitDiff.login || author;
+      const time = (commitDiff.time && commitDiff.time > createdAt) ? commitDiff.time : createdAt;
+      if (isBot(login)) continue;
+      const key = `${login}|${awardMonth(time)}`;
+      weights[key] = (weights[key] || 0) + commitDiff.added + commitDiff.deleted;
+      if (!times[key] || time > times[key]) times[key] = time;
+    }
+    if (!Object.keys(weights).length && !isBot(author)) {
+      const key = `${author}|${awardMonth(createdAt)}`;
+      weights[key] = 1;
+      times[key] = createdAt;
+    }
+    for (const [key, amount] of Object.entries(allocateXp(diff.codeXp, weights))) {
+      const [login, month] = key.split('|');
+      if (amount) awards[`code:${key}`] = { kind: 'code', login, month, amount, time: times[key] || createdAt };
+    }
+    const addedShares = allocateXp(diff.added, weights);
+    const deletedShares = allocateXp(diff.deleted, weights);
+    for (const key of new Set([...Object.keys(addedShares), ...Object.keys(deletedShares)])) {
+      const [login, month] = key.split('|');
+      lineAwards[key] = { login, month, added: addedShares[key] || 0, deleted: deletedShares[key] || 0 };
+    }
+    if (diff.openXp && !isBot(author)) awards[`open:${author}:${awardMonth(createdAt)}`] = award('pr-opened', author, diff.openXp, createdAt);
+    if (merged && diff.mergeXp && !isBot(merger)) awards[`merge:${merger}:${awardMonth(mergedAt)}`] = award('pr-merged', merger, diff.mergeXp, mergedAt);
+  }
+  return { key: `pr:${repo}:${number}`, repo, title: String(pr.title || 'PR'), awards, lineAwards, added: diff.added, deleted: diff.deleted, fileCount: diff.fileCount, updatedAt: String(pr.updated_at || createdAt) };
+}
+
+async function getDirectLedgerEntry(repo: string, sha: string): Promise<ScoreLedgerEntry | null | undefined> {
+  const associationKey = `${repo}:${sha}`;
+  if (state.commitPrCache![associationKey] === undefined) {
+    const prs = await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits/${sha}/pulls`, 2);
+    if (!prs) return undefined;
+    state.commitPrCache![associationKey] = prs.some(pr => pr.state === 'open' || Boolean(pr.merged_at));
+  }
+  if (state.commitPrCache![associationKey]) return null;
+  const diff = await getCommitDiff(repo, sha);
+  if (!diff) return undefined;
+  if (!diff.login || !diff.time || isBot(diff.login)) return null;
+  const code = diff.codeXp;
+  const month = awardMonth(diff.time);
+  const awards = code ? { [`code:${diff.login}:${month}`]: award('code', diff.login, code, diff.time) } : {};
+  const lineAwards = { [`${diff.login}|${month}`]: { login: diff.login, month, added: diff.added, deleted: diff.deleted } };
+  return { key: `direct:${repo}:${sha}`, repo, title: diff.title || 'direct push', awards, lineAwards, added: diff.added, deleted: diff.deleted, fileCount: diff.fileCount, updatedAt: diff.time };
+}
+
+async function getDefaultBranch(repo: string): Promise<string | null> {
+  if (state.defaultBranches?.[repo]) return state.defaultBranches[repo];
+  const result = await ghFetch(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}`);
+  const branch = (result.data as Record<string, unknown> | null)?.default_branch;
+  if (!result.ok || typeof branch !== 'string') return null;
+  state.defaultBranches![repo] = branch;
+  return branch;
+}
+
+function rebuildScoringFeed(): void {
+  const other = state.feed.filter(item => !(item.time >= state.monthStartDate &&
+    (['pr-opened', 'pr-merged'].includes(item.type) || (item.type === 'commit' && !item.message.startsWith('created branch')))));
+  const scored: FeedItem[] = [];
+  for (const entry of Object.values(state.scoreLedger || {})) {
+    for (const [id, item] of Object.entries(entry.awards)) {
+      if (!item.amount || item.month !== state.monthStartDate) continue;
+      scored.push({ id: `score:${entry.key}:${id}`, type: item.kind === 'code' ? 'commit' : item.kind,
+        user: item.login, repo: entry.repo, message: item.kind === 'code' ? 'changed code' : item.kind === 'pr-opened' ? 'opened PR' : 'merged PR',
+        detail: entry.title, xp: item.amount, time: item.time });
+    }
+  }
+  state.feed = [...other, ...scored].sort((a, b) => b.time.localeCompare(a.time)).slice(0, 50);
+}
+
+function recomputeScoredLines(): void {
+  for (const stats of Object.values(state.stats)) { stats.monthlyLinesAdded = 0; stats.monthlyLinesDeleted = 0; }
+  for (const entry of Object.values(state.scoreLedger || {})) for (const line of Object.values(entry.lineAwards)) {
+    if (line.month !== state.monthStartDate) continue;
+    ensureMember(line.login);
+    state.stats[line.login].monthlyLinesAdded += line.added;
+    state.stats[line.login].monthlyLinesDeleted += line.deleted;
+  }
+}
+
+function replaceLedgerEntry(entry: ScoreLedgerEntry): void {
+  if (state.scoringEpoch) {
+    entry.awards = Object.fromEntries(Object.entries(entry.awards).filter(([, item]) => item.month >= state.scoringEpoch!));
+    entry.lineAwards = Object.fromEntries(Object.entries(entry.lineAwards).filter(([, item]) => item.month >= state.scoringEpoch!));
+  }
+  const previous = state.scoreLedger![entry.key];
+  const deltas: Record<string, number> = {};
+  for (const item of Object.values(previous?.awards || {})) deltas[item.login] = (deltas[item.login] || 0) - item.amount;
+  for (const item of Object.values(entry.awards)) deltas[item.login] = (deltas[item.login] || 0) + item.amount;
+  for (const [login, delta] of Object.entries(deltas)) {
+    ensureMember(login);
+    state.stats[login].totalXp += delta;
+  }
+  const monthlyDeltas: Record<string, number> = {};
+  for (const item of Object.values(previous?.awards || {})) if (item.month === state.monthStartDate) monthlyDeltas[item.login] = (monthlyDeltas[item.login] || 0) - item.amount;
+  for (const item of Object.values(entry.awards)) if (item.month === state.monthStartDate) monthlyDeltas[item.login] = (monthlyDeltas[item.login] || 0) + item.amount;
+  for (const [login, delta] of Object.entries(monthlyDeltas)) state.stats[login].monthlyXp += delta;
+  state.scoreLedger![entry.key] = entry;
+  recomputeScoredLines();
+  rebuildScoringFeed();
+  persistState();
+  broadcast('state', getClientState());
+}
+
+const pendingScoring = new Set<string>();
+async function reconcilePr(repo: string, number: number): Promise<void> {
+  if (state.scoringVersion !== 2 || state.scoringHash !== scoreConfigHash()) return;
+  const key = `pr:${repo}:${number}`;
+  if (pendingScoring.has(key)) return;
+  pendingScoring.add(key);
+  try { const entry = await getPrLedgerEntry(repo, number); if (entry) replaceLedgerEntry(entry); }
+  catch (err) { console.warn(`[server] Could not refresh PR score ${repo}#${number}:`, err); }
+  finally { pendingScoring.delete(key); }
+}
+
+async function reconcileDirectCommit(repo: string, sha: string): Promise<void> {
+  if (state.scoringVersion !== 2 || state.scoringHash !== scoreConfigHash()) return;
+  const key = `direct:${repo}:${sha}`;
+  if (state.scoreLedger?.[key] || pendingScoring.has(key)) return;
+  pendingScoring.add(key);
+  try { const entry = await getDirectLedgerEntry(repo, sha); if (entry) replaceLedgerEntry(entry); }
+  catch (err) { console.warn(`[server] Could not refresh commit score ${repo}@${sha.slice(0, 8)}:`, err); }
+  finally { pendingScoring.delete(key); }
+}
+
+async function collectCurrentMonthScores(): Promise<Record<string, ScoreLedgerEntry>> {
+  const from = state.monthStartDate;
+  const to = todayStr();
+  const [created, merged, updated, commits] = await Promise.all([
+    searchAll('issues', `org:${GH_ORG} type:pr`, 'created', from, to),
+    searchAll('issues', `org:${GH_ORG} type:pr is:merged`, 'merged', from, to),
+    searchAll('issues', `org:${GH_ORG} type:pr`, 'updated', from, to),
+    searchAll('commits', `org:${GH_ORG}`, 'committer-date', from, to),
+  ]);
+  if (![created, merged, updated, commits].every(result => result.complete)) throw new Error('GitHub search was incomplete; scores were not changed');
+  const prs = new Map<string, { repo: string; number: number }>();
+  for (const pr of [...created.items, ...merged.items, ...updated.items]) {
+    const repo = String(pr.repository_url || '').split('/').pop() || '';
+    const number = Number(pr.number);
+    if (!repo || !number || (GH_REPOS.length && !GH_REPOS.includes(repo))) continue;
+    prs.set(`${repo}:${number}`, { repo, number });
+  }
+  const entries: Record<string, ScoreLedgerEntry> = {};
+  let processed = 0;
+  for (const { repo, number } of prs.values()) {
+    const entry = await getPrLedgerEntry(repo, number);
+    if (!entry) throw new Error(`Could not score ${repo}#${number}; scores were not changed`);
+    entry.awards = Object.fromEntries(Object.entries(entry.awards).filter(([, item]) => item.month >= from));
+    entry.lineAwards = Object.fromEntries(Object.entries(entry.lineAwards).filter(([, item]) => item.month >= from));
+    entries[entry.key] = entry;
+    if (++processed % 25 === 0) { persistState(); console.log(`[server] Scored ${processed}/${prs.size} PRs for migration`); }
+  }
+  const repos = new Set<string>();
+  for (const commit of commits.items) {
+    const repo = (commit.repository as Record<string, string> | undefined)?.name;
+    if (repo && (!GH_REPOS.length || GH_REPOS.includes(repo))) repos.add(repo);
+  }
+  for (const repo of repos) {
+    const branch = await getDefaultBranch(repo);
+    if (!branch) throw new Error(`Could not identify default branch for ${repo}; scores were not changed`);
+    const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(`${from}T00:00:00Z`)}`;
+    const branchCommits = await ghList(url);
+    if (!branchCommits) throw new Error(`Could not list default-branch commits for ${repo}; scores were not changed`);
+    for (const commit of branchCommits) {
+      const sha = String(commit.sha || '');
+      if (!sha) continue;
+      const entry = await getDirectLedgerEntry(repo, sha);
+      if (entry === undefined) throw new Error(`Could not score ${repo}@${sha.slice(0, 8)}; scores were not changed`);
+      if (entry) entries[entry.key] = entry;
+    }
+    persistState();
+  }
+  return entries;
+}
+
+function applyCurrentScoreSnapshot(entries: Record<string, ScoreLedgerEntry>): void {
+  const before: Record<string, number> = {}, after: Record<string, number> = {};
+  for (const entry of Object.values(state.scoreLedger || {})) for (const item of Object.values(entry.awards)) {
+    if (item.month === state.monthStartDate) before[item.login] = (before[item.login] || 0) + item.amount;
+  }
+  for (const entry of Object.values(entries)) for (const item of Object.values(entry.awards)) {
+    if (item.month === state.monthStartDate) after[item.login] = (after[item.login] || 0) + item.amount;
+  }
+  for (const login of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    ensureMember(login);
+    const delta = (after[login] || 0) - (before[login] || 0);
+    state.stats[login].monthlyXp += delta;
+    state.stats[login].totalXp += delta;
+  }
+  const combined: Record<string, ScoreLedgerEntry> = {};
+  for (const [key, old] of Object.entries(state.scoreLedger || {})) {
+    combined[key] = { ...old,
+      awards: Object.fromEntries(Object.entries(old.awards).filter(([, item]) => item.month < state.monthStartDate)),
+      lineAwards: Object.fromEntries(Object.entries(old.lineAwards).filter(([, item]) => item.month < state.monthStartDate)),
+    };
+  }
+  for (const [key, entry] of Object.entries(entries)) {
+    combined[key] = { ...entry,
+      awards: { ...combined[key]?.awards, ...entry.awards },
+      lineAwards: { ...combined[key]?.lineAwards, ...entry.lineAwards },
+    };
+  }
+  state.scoreLedger = combined;
+  state.scoringHash = scoreConfigHash();
+  recomputeScoredLines();
+  rebuildScoringFeed();
+  persistState();
+  broadcast('state', getClientState());
 }
 
 // ── Core XP logic ────────────────────────────────
@@ -474,7 +831,8 @@ function checkMonthlyReset(): void {
 
 // ── GitHub polling ───────────────────────────────
 function processEvent(event: Record<string, unknown>): void {
-  const xp = xpConfig.xpValues;
+  const xp = eventXpValues();
+  const scored = state.scoringVersion === 2;
   const actorObj = event.actor as Record<string, string>;
   const actor = actorObj?.login;
   const avatarUrl = actorObj?.avatar_url || '';
@@ -506,16 +864,22 @@ function processEvent(event: Record<string, unknown>): void {
         }
         for (const [login, authored] of byAuthor) {
           const msg = authored[0]?.message?.split('\n')[0] || 'pushed code';
-          addXp(login, xp.commit * authored.length, 'commit', repo, `shipped ${authored.length} commit${authored.length > 1 ? 's' : ''}`, msg, eventTime);
+          if (!scored) addXp(login, xp.commit * authored.length, 'commit', repo, `shipped ${authored.length} commit${authored.length > 1 ? 's' : ''}`, msg, eventTime);
           incrementStat(login, 'monthlyCommits', authored.length);
           if (!eventTime || eventTime.slice(0, 10) === todayStr()) incrementStat(login, 'dailyCommits', authored.length);
           state.stats[login].lastCommitDate = eventTime || new Date().toISOString();
           bumpStreak(login, eventTime);
         }
-        // Fetch line stats via compare API
+        if (scored && repo) {
+          const ref = String(payload.ref || '');
+          void getDefaultBranch(repo).then(branch => {
+            if (branch && ref === `refs/heads/${branch}`) for (const commit of newCommits) void reconcileDirectCommit(repo, commit.sha!);
+          }).catch(err => console.warn(`[server] Could not check default branch for ${repo}:`, err));
+        }
+        // Fetch line stats via compare API in the legacy scoring mode.
         const before = payload.before as string;
         const head = payload.head as string;
-        if (before && head && repo) {
+        if (!scored && before && head && repo) {
           fetchPushLineStats(actor, repo, before, head).catch(() => {});
         }
       }
@@ -537,23 +901,24 @@ function processEvent(event: Record<string, unknown>): void {
         const key = `rt-pr-open-${repo}-${prNum}`;
         if (!seenIds.has(key)) {
           seenIds.add(key);
-          addXp(actor, xp.prOpened, 'pr-opened', repo, 'opened PR', title, eventTime);
+          if (!scored) addXp(actor, xp.prOpened, 'pr-opened', repo, 'opened PR', title, eventTime);
           incrementStat(actor, 'monthlyPRsOpened');
           const prAdd = (pr?.additions as number) || 0;
           const prDel = (pr?.deletions as number) || 0;
-          if (prAdd || prDel) addLineStats(actor, prAdd, prDel);
+          if (!scored && (prAdd || prDel)) addLineStats(actor, prAdd, prDel);
         }
       } else if (action === 'closed' && pr?.merged) {
         const key = `rt-pr-merge-${repo}-${prNum}`;
         if (!seenIds.has(key)) {
           seenIds.add(key);
-          addXp(actor, xp.prMerged, 'pr-merged', repo, 'merged PR', title, eventTime);
+          if (!scored) addXp(actor, xp.prMerged, 'pr-merged', repo, 'merged PR', title, eventTime);
           incrementStat(actor, 'monthlyPRsMerged');
           const prAdd = (pr?.additions as number) || 0;
           const prDel = (pr?.deletions as number) || 0;
-          if (prAdd || prDel) addLineStats(actor, prAdd, prDel);
+          if (!scored && (prAdd || prDel)) addLineStats(actor, prAdd, prDel);
         }
       }
+      if (scored && repo && prNum && ['opened', 'synchronize', 'reopened', 'closed'].includes(action)) void reconcilePr(repo, prNum);
       break;
     }
     case 'PullRequestReviewEvent': {
@@ -595,7 +960,7 @@ function processEvent(event: Record<string, unknown>): void {
 }
 
 function processIssueOrPR(item: Record<string, unknown>, repo: string): void {
-  const xp = xpConfig.xpValues;
+  const xp = eventXpValues();
   const user = item.user as Record<string, string> | undefined;
   const login = user?.login;
   const avatarUrl = user?.avatar_url || '';
@@ -617,8 +982,13 @@ function processIssueOrPR(item: Record<string, unknown>, repo: string): void {
     const openKey = `rt-pr-open-${repo}-${item.number}`;
     if (createdAt >= ms && !seenIds.has(openKey)) {
       seenIds.add(openKey);
-      addXp(login, xp.prOpened, 'pr-opened', repo, 'opened PR', title, createdAt);
+      if (state.scoringVersion !== 2) addXp(login, xp.prOpened, 'pr-opened', repo, 'opened PR', title, createdAt);
       incrementStat(login, 'monthlyPRsOpened');
+    }
+    if (state.scoringVersion === 2 && item.number) {
+      const key = `pr:${repo}:${item.number}`;
+      const updatedAt = String(item.updated_at || '');
+      if (!state.scoreLedger?.[key] || updatedAt > state.scoreLedger[key].updatedAt) void reconcilePr(repo, Number(item.number));
     }
     // The issues list names the PR author, not the merger. The event poller and
     // full sync fetch the merger's identity before awarding merge XP.
@@ -636,10 +1006,12 @@ function processIssueOrPR(item: Record<string, unknown>, repo: string): void {
 let reposFetched = false;
 let polling = false;
 let syncing = false;
+let migrationRunning = false;
+let lastDirectSweep = 0;
 let repoPollCursor = 0;
 
 async function pollEvents(): Promise<void> {
-  if (polling || syncing) return;
+  if (polling || syncing || migrationRunning) return;
   polling = true;
   try {
   reloadConfigIfChanged();
@@ -737,26 +1109,35 @@ async function pollEvents(): Promise<void> {
 }
 
 async function fullSync(): Promise<void> {
-  if (syncing || polling) return;
+  if (syncing || polling || migrationRunning) return;
   syncing = true;
   try {
   reloadConfigIfChanged();
   checkMonthlyReset();
-  const xp = xpConfig.xpValues;
+  const xp = eventXpValues();
+  const scored = state.scoringVersion === 2;
   const ws = monthStart();
   const today = todayStr();
 
+  if (scored && state.scoringHash !== scoreConfigHash()) {
+    try { applyCurrentScoreSnapshot(await collectCurrentMonthScores()); }
+    catch (err) { console.warn('[server] Could not apply updated scoring config:', err); }
+  }
+  const canScore = scored && state.scoringHash === scoreConfigHash();
+
   try {
     // Parallel search queries
-    const [commitResult, prCreatedResult, prMergedResult, issueClosedResult, issueOpenedResult] = await Promise.allSettled([
+    const [commitResult, prCreatedResult, prMergedResult, issueClosedResult, issueOpenedResult, prUpdatedResult] = await Promise.allSettled([
       searchAll('commits', `org:${GH_ORG}`, 'committer-date', ws, today),
       searchAll('issues', `org:${GH_ORG} type:pr`, 'created', ws, today),
       searchAll('issues', `org:${GH_ORG} type:pr is:merged`, 'merged', ws, today),
       searchAll('issues', `org:${GH_ORG} type:issue is:closed`, 'closed', ws, today),
       searchAll('issues', `org:${GH_ORG} type:issue`, 'created', ws, today),
+      scored ? searchAll('issues', `org:${GH_ORG} type:pr`, 'updated', ws, today) : Promise.resolve({ items: [], complete: true }),
     ]);
     const searchData = (result: PromiseSettledResult<SearchResult>): SearchResult => result.status === 'fulfilled' ? result.value : { items: [], complete: false };
     const commitsSearch = searchData(commitResult), prCreatedSearch = searchData(prCreatedResult), prMergedSearch = searchData(prMergedResult), issueClosedSearch = searchData(issueClosedResult), issueOpenedSearch = searchData(issueOpenedResult);
+    const prUpdatedSearch = searchData(prUpdatedResult);
 
     // Commits
     const commitItems = commitsSearch.complete ? commitsSearch.items : [];
@@ -791,7 +1172,7 @@ async function fullSync(): Promise<void> {
     const prKey = (p: Record<string, unknown>) => `${p.repository_url || ''}#${p.number || ''}`;
     const createdKeys = new Set(prCreatedItems.map(prKey));
     const mergedKeys = new Set(prMergedItems.map(prKey));
-    const prAllItems = [...new Map([...prCreatedItems, ...prMergedItems].map(p => [prKey(p), p])).values()];
+    const prAllItems = [...new Map([...prCreatedItems, ...prMergedItems, ...(prUpdatedSearch.complete ? prUpdatedSearch.items : [])].map(p => [prKey(p), p])).values()];
     const prDataByUser: Record<string, { opens: number; merges: number; avatarUrl: string }> = {};
     let mergesComplete = prMergedSearch.complete;
     const prFeedRaw: Array<{ login: string; title: string; repo: string; time: string; merged: boolean; key: string }> = [];
@@ -831,7 +1212,7 @@ async function fullSync(): Promise<void> {
         const adds = (prDetail.additions as number) || 0;
         const dels = (prDetail.deletions as number) || 0;
         const login = batch[j].login;
-        if (!isBot(login)) {
+        if (!scored && !isBot(login)) {
           if (!linesByUser[login]) linesByUser[login] = { added: 0, deleted: 0 };
           linesByUser[login].added += adds;
           linesByUser[login].deleted += dels;
@@ -934,16 +1315,16 @@ async function fullSync(): Promise<void> {
         if (state.commitLedgerSeeded) {
           commitDelta = c?.unseen || 0;
           s.monthlyCommits += commitDelta;
-          totalDelta += commitDelta * xp.commit;
+          totalDelta += commitDelta * (scored ? 0 : xp.commit);
         } else {
           const beforeCommits = s.monthlyCommits;
-          bumpCategory(commits, 'monthlyCommits', xp.commit);
+          bumpCategory(commits, 'monthlyCommits', scored ? 0 : xp.commit);
           commitDelta = s.monthlyCommits - beforeCommits;
         }
       }
       creditedCommitsByUser.set(login, commitDelta);
-      if (prCreatedSearch.complete) bumpCategory(prOpens, 'monthlyPRsOpened', xp.prOpened);
-      if (mergesComplete) bumpCategory(prMerges, 'monthlyPRsMerged', xp.prMerged);
+      if (prCreatedSearch.complete) bumpCategory(prOpens, 'monthlyPRsOpened', scored ? 0 : xp.prOpened);
+      if (mergesComplete) bumpCategory(prMerges, 'monthlyPRsMerged', scored ? 0 : xp.prMerged);
       if (closesComplete) bumpCategory(issueCloses, 'monthlyIssuesClosed', xp.issueClosed);
       if (issueOpenedSearch.complete) bumpCategory(issueOpens, 'monthlyIssuesOpened', xp.issueOpened);
       if (c?.lastTime && (!s.lastCommitDate || c.lastTime > s.lastCommitDate)) s.lastCommitDate = c.lastTime;
@@ -956,7 +1337,7 @@ async function fullSync(): Promise<void> {
         s.totalXp += totalDelta;
       }
       const lines = linesByUser[login];
-      if (lines) {
+      if (!scored && lines) {
         if (lines.added > s.monthlyLinesAdded) s.monthlyLinesAdded = lines.added;
         if (lines.deleted > s.monthlyLinesDeleted) s.monthlyLinesDeleted = lines.deleted;
       }
@@ -971,7 +1352,7 @@ async function fullSync(): Promise<void> {
     const newFeedItems: FeedItem[] = [];
     const existingIds = new Set(state.feed.map(f => f.id));
 
-    for (const login of allLogins) {
+    for (const login of scored ? [] : allLogins) {
       const c = commitsByUser[login];
       const newCommitCount = creditedCommitsByUser.get(login) || 0;
       if (c && c.lastMsg && newCommitCount > 0) {
@@ -992,7 +1373,7 @@ async function fullSync(): Promise<void> {
       }
     }
 
-    for (const item of prFeedRaw) {
+    for (const item of scored ? [] : prFeedRaw) {
       if (item.merged && !mergesComplete) continue;
       const actionKey = `rt-pr-${item.merged ? 'merge' : 'open'}-${item.repo}-${item.key.split('#').pop()}`;
       if (seenIds.has(actionKey)) continue;
@@ -1038,6 +1419,35 @@ async function fullSync(): Promise<void> {
     state.feed = [...newFeedItems, ...state.feed]
       .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
       .slice(0, 50);
+
+    if (canScore) {
+      const changed = prAllItems.filter(pr => {
+        const repo = String(pr.repository_url || '').split('/').pop() || '';
+        if (!repo || (GH_REPOS.length && !GH_REPOS.includes(repo))) return false;
+        const key = `pr:${repo}:${pr.number}`;
+        return !state.scoreLedger?.[key] || String(pr.updated_at || '') > state.scoreLedger[key].updatedAt;
+      });
+      for (const pr of changed) {
+        const repo = String(pr.repository_url || '').split('/').pop() || '';
+        await reconcilePr(repo, Number(pr.number));
+      }
+    }
+    if (canScore && commitsSearch.complete && Date.now() - lastDirectSweep > 30 * 60_000) {
+      const reposWithCommits = new Set(commitItems.map(commit => (commit.repository as Record<string, string> | undefined)?.name).filter((repo): repo is string => Boolean(repo)));
+      let sweepComplete = true;
+      for (const repo of reposWithCommits) {
+        const branch = await getDefaultBranch(repo);
+        if (!branch) { sweepComplete = false; continue; }
+        const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(`${ws}T00:00:00Z`)}`;
+        const branchCommits = await ghList(url);
+        if (!branchCommits) { sweepComplete = false; continue; }
+        for (const commit of branchCommits) {
+          const sha = String(commit.sha || '');
+          if (sha && !state.scoreLedger?.[`direct:${repo}:${sha}`]) await reconcileDirectCommit(repo, sha);
+        }
+      }
+      if (sweepComplete) lastDirectSweep = Date.now();
+    }
 
     // Boss progress
     const totalMerged = Object.values(prDataByUser).reduce((a, p) => a + p.merges, 0);
@@ -1173,8 +1583,64 @@ app.put('/api/config', requireAdmin, (req, res) => {
   }
 });
 
+// Convert only the current month's legacy commit/PR points. Existing review,
+// issue, branch, streak and prior-month XP remain in the persisted state.
+app.post('/api/scoring/migrate', requireAdmin, async (_req, res) => {
+  if (state.scoringVersion === 2) { res.json({ ok: true, alreadyMigrated: true }); return; }
+  if (migrationRunning || polling || syncing) { res.status(409).json({ error: 'Sync in progress; retry shortly' }); return; }
+  migrationRunning = true;
+  try {
+    reloadConfigIfChanged();
+    checkMonthlyReset();
+    const entries = await collectCurrentMonthScores();
+    const newXp: Record<string, number> = {};
+    for (const entry of Object.values(entries)) for (const item of Object.values(entry.awards)) {
+      if (item.month === state.monthStartDate) newXp[item.login] = (newXp[item.login] || 0) + item.amount;
+    }
+    const oldXp = { ...xpConfig.xpValues, ...xpConfig.legacyXpValues };
+    const rows = [...new Set([...Object.keys(state.stats), ...Object.keys(newXp)])].map(login => {
+      const s = state.stats[login] || emptyStats(login);
+      const prior = s.monthlyCommits * oldXp.commit + s.monthlyPRsOpened * oldXp.prOpened + s.monthlyPRsMerged * oldXp.prMerged;
+      return { login, oldCodeAndPrXp: prior, newCodeAndPrXp: newXp[login] || 0,
+        monthlyBefore: s.monthlyXp, totalBefore: s.totalXp,
+        monthlyAfter: s.monthlyXp - prior + (newXp[login] || 0),
+        totalAfter: s.totalXp - prior + (newXp[login] || 0) };
+    });
+    const invalid = rows.find(row => row.monthlyAfter < 0 || row.totalAfter < 0);
+    if (invalid) throw new Error(`Cannot safely migrate ${invalid.login}: legacy counter XP exceeds the recorded score`);
+    for (const row of rows) {
+      ensureMember(row.login);
+      state.stats[row.login].monthlyXp = row.monthlyAfter;
+      state.stats[row.login].totalXp = row.totalAfter;
+    }
+    state.scoreLedger = entries;
+    state.scoringEpoch = state.monthStartDate;
+    state.scoringVersion = 2;
+    state.scoringHash = scoreConfigHash();
+    recomputeScoredLines();
+    rebuildScoringFeed();
+    persistState();
+    broadcast('state', getClientState());
+    res.json({ ok: true, entries: Object.keys(entries).length, rows });
+  } catch (err) {
+    console.warn('[server] Scoring migration failed:', err);
+    res.status(503).json({ error: String(err) });
+  } finally {
+    migrationRunning = false;
+  }
+});
+
 // Force recalculate (wipe state and re-sync)
 app.post('/api/recalculate', requireAdmin, async (_req, res) => {
+  if (migrationRunning || polling || syncing) { res.status(409).json({ error: 'Sync in progress; retry shortly' }); return; }
+  if (state.scoringVersion === 2) {
+    migrationRunning = true;
+    let entries: Record<string, ScoreLedgerEntry>;
+    try { entries = await collectCurrentMonthScores(); }
+    catch (err) { migrationRunning = false; res.status(503).json({ error: String(err) }); return; }
+    state.scoreLedger = entries;
+    migrationRunning = false;
+  }
   console.log('[server] Force recalculate requested');
   // Preserve members (avatars, colors) but reset XP
   for (const login of Object.keys(state.stats)) {
@@ -1186,6 +1652,16 @@ app.post('/api/recalculate', requireAdmin, async (_req, res) => {
   seenIds.clear();
   creditedCommitShas.clear();
   state.commitLedgerSeeded = true;
+  if (state.scoringVersion === 2) {
+    for (const entry of Object.values(state.scoreLedger || {})) for (const item of Object.values(entry.awards)) {
+      if (item.month !== state.monthStartDate) continue;
+      ensureMember(item.login);
+      state.stats[item.login].monthlyXp += item.amount;
+      state.stats[item.login].totalXp += item.amount;
+    }
+    recomputeScoredLines();
+    rebuildScoringFeed();
+  }
   await fullSync();
   res.json(getClientState());
 });
@@ -1193,12 +1669,12 @@ app.post('/api/recalculate', requireAdmin, async (_req, res) => {
 // A repair preview never changes scores. Historical branch and streak bonuses
 // were not itemized in old state, so excess is left untouched.
 function buildRepairPreview() {
-  const xp = xpConfig.xpValues;
+  const xp = eventXpValues();
   const rows = Object.entries(state.stats).sort(([a], [b]) => a.localeCompare(b)).map(([login, s]) => {
     const minimumXp =
-      (s.monthlyCommits || 0) * xp.commit +
-      (s.monthlyPRsOpened || 0) * xp.prOpened +
-      (s.monthlyPRsMerged || 0) * xp.prMerged +
+      (state.scoringVersion === 2
+        ? Object.values(state.scoreLedger || {}).flatMap(entry => Object.values(entry.awards)).filter(item => item.login === login && item.month === state.monthStartDate).reduce((sum, item) => sum + item.amount, 0)
+        : (s.monthlyCommits || 0) * xp.commit + (s.monthlyPRsOpened || 0) * xp.prOpened + (s.monthlyPRsMerged || 0) * xp.prMerged) +
       (s.monthlyPRsReviewed || 0) * xp.prReviewed +
       (s.monthlyIssuesClosed || 0) * xp.issueClosed +
       (s.monthlyIssuesOpened || 0) * xp.issueOpened;

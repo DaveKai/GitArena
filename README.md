@@ -114,18 +114,20 @@ Vite also binds to `0.0.0.0`, so a TV on the same local network can open `http:/
 
 | Action | XP |
 |---|---|
-| Unique commit SHA | +50 |
-| Open PR | +80 |
-| Merge PR | +120 |
+| Eligible code changes | Up to +100 per PR diff or direct default-branch commit |
+| Open PR | Up to +10, scaled to the eligible diff |
+| Merge PR | Up to +40, scaled to the eligible diff |
 | Review PR | +60 |
 | Close issue | +40 |
 | Open issue | +20 |
 | Create branch | +30 |
 | Streak milestone (3/5/7/10/14/21/30 days) | +200 |
 
-All values are live-editable in `xp-config.json` — no restart needed.
+Code XP depends on eligible changed lines and files. A diff of at least 100 changed lines across at least three files receives the full award; lines determine 75% of the scale and files 25%. Generated directories, lockfiles and minified assets listed in `xp-config.json` do not count. Opening a PR gives provisional code and opening XP. Updating its diff adjusts those awards; closing it without merging removes them. Merge XP goes to the merger, while code XP is split among commit authors by eligible contribution. A commit associated with a PR is not also paid as a direct push. Reviews, issues, branches and streaks keep their configured rates.
 
-The leaderboard and counters reset at the start of each UTC month. Commit XP is awarded once per unique SHA. PR merge and issue close XP go to the person who performed the action.
+The `scoring` block in `xp-config.json` controls the diff formula and file exclusions. The zero `commit`, `prOpened` and `prMerged` flat rates in `xpValues` are intentional. `legacyXpValues` is used only before migration of an existing state file.
+
+The leaderboard and counters reset at the start of each UTC month. Historical total XP is preserved when an existing installation migrates. To convert the current month after updating an existing installation, send an admin-authorized `POST /api/scoring/migrate`. It fetches the current month's PR and default-branch diffs, checks that the old counter-based portion can be replaced safely, then updates the month in one operation. It returns an error without changing scores if GitHub data is incomplete. The endpoint is idempotent after a successful migration.
 
 ### Score repair
 
