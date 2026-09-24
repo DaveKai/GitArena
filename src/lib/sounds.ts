@@ -2,6 +2,10 @@
 
 let ctx: AudioContext | null = null;
 const MASTER_VOLUME = 0.4;
+let enabled = false;
+
+export function setSoundEnabled(value: boolean) { enabled = value; }
+export function unlockAudio() { try { getCtx().resume().catch(() => {}); } catch { /* audio unsupported */ } }
 
 function getCtx(): AudioContext {
   if (!ctx) ctx = new AudioContext();
@@ -9,7 +13,9 @@ function getCtx(): AudioContext {
 }
 
 function playTone(freq: number, duration: number, type: OscillatorType = 'sine', vol = 0.15, detune = 0) {
-  const c = getCtx();
+  if (!enabled) return;
+  let c: AudioContext;
+  try { c = getCtx(); } catch { return; }
   if (c.state === 'suspended') c.resume().catch(() => {});
   const osc = c.createOscillator();
   const gain = c.createGain();
@@ -21,6 +27,21 @@ function playTone(freq: number, duration: number, type: OscillatorType = 'sine',
   osc.connect(gain).connect(c.destination);
   osc.start(c.currentTime);
   osc.stop(c.currentTime + duration);
+}
+
+export function playEventSound(type: string) {
+  if (!enabled) return;
+  switch (type) {
+    case 'commit': sfxCommit(); break;
+    case 'pr-merged': sfxPRMerged(); break;
+    case 'review': sfxReview(); break;
+    case 'issue': sfxIssueClosed(); break;
+    case 'level-up': sfxLevelUp(); break;
+    case 'overtaken': sfxOvertaken(); break;
+    case 'achievement': sfxAchievement('rare'); break;
+    case 'boss-victory': sfxBossVictory(); break;
+    default: sfxXp();
+  }
 }
 
 /** Short rising "ding-ding" for XP/feed events */

@@ -7,16 +7,16 @@ export interface Member {
 
 export interface DevStats {
   login: string;
-  weeklyXp: number;
+  monthlyXp: number;
   totalXp: number;
-  weeklyCommits: number;
-  weeklyPRsOpened: number;
-  weeklyPRsMerged: number;
-  weeklyPRsReviewed: number;
-  weeklyIssuesClosed: number;
-  weeklyIssuesOpened: number;
-  weeklyLinesAdded: number;
-  weeklyLinesDeleted: number;
+  monthlyCommits: number;
+  monthlyPRsOpened: number;
+  monthlyPRsMerged: number;
+  monthlyPRsReviewed: number;
+  monthlyIssuesClosed: number;
+  monthlyIssuesOpened: number;
+  monthlyLinesAdded: number;
+  monthlyLinesDeleted: number;
   dailyCommits: number;
   dailyIssuesClosed: number;
   streak: number;

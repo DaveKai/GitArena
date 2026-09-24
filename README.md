@@ -2,7 +2,7 @@
 
 # 🏟️ GitArena
 
-**A live gamification dashboard that turns your GitHub org activity into XP, streaks, badges, and boss fights — designed to run on your team's office TV.**
+**A live arena for GitHub activity, designed for your team's office TV.**
 
 [![CI](https://github.com/Societe-tangeroise-de-maintenance/GitArena/actions/workflows/ci.yml/badge.svg)](https://github.com/Societe-tangeroise-de-maintenance/GitArena/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -21,23 +21,16 @@ GitArena polls your GitHub organisation every 10 seconds and turns every commit,
 
 **Key features:**
 
-- 🏆 **Live leaderboard** — weekly XP ranking with animated rank changes
+- 🏆 **Live leaderboard** — monthly XP ranking plus a scrolling full roster
 - 🔥 **Streaks** — daily activity streaks with milestone bonuses
 - 🎖️ **Badges** — automatically awarded (ghostSlayer, closer, ironDev, streakMaster…)
 - 👾 **Boss fights** — team-wide goals (close 30 issues, merge 20 PRs, hit 200 commits)
 - 📡 **Real-time** — Server-Sent Events push every event instantly
-- 🎬 **Cinematic overlays** — level-up, rank overtaken, achievement, and boss-victory animations
+- 🎬 **Game-style moments** — animated scores, rank changes, achievements, and team victories
+- 🔊 **Optional sound** — a startup sound choice with a persistent mute control
 - 🌟 **Spotlight panels** — rotate through trophy, velocity, streak wall, duel, and fun stats
 - 🎭 **Demo mode** — runs without a GitHub token for presentations and screenshots
 - 🔧 **Hot-reload config** — edit `xp-config.json` to tune XP values live, no restart needed
-
----
-
-## Screenshots
-
-All screenshots below were generated in demo mode with synthetic activity and fake avatars.
-
-![GitArena dashboard](docs/screenshots/gitarena-dashboard-desktop.png)
 
 ---
 
@@ -75,6 +68,7 @@ npm start               # runs backend (port 3002) + Vite dev server (port 5173)
 ```
 
 Open **http://localhost:5173** in your browser.
+Vite also binds to `0.0.0.0`, so a TV on the same local network can open `http://<your-computer-LAN-IP>:5173`.
 
 ---
 
@@ -86,7 +80,7 @@ Open **http://localhost:5173** in your browser.
 | `GITARENA_ORG` | ✅ | GitHub organisation slug (e.g. `my-company`) |
 | `GITARENA_REPOS` | — | Comma-separated repo names to watch. Empty = auto-discover all org repos |
 | `PORT` | — | Backend port (default: `3002`) |
-| `GITARENA_ADMIN_SECRET` | — | If set, `POST /api/recalculate` and `POST /api/repair` require an `X-Admin-Secret` header matching this value |
+| `GITARENA_ADMIN_SECRET` | — | If set, the recalculation and repair endpoints require an `X-Admin-Secret` header matching this value |
 | `SERVE_STATIC` | — | Set to `1` to have the backend serve the built frontend (used by Docker) |
 
 ---
@@ -119,7 +113,7 @@ Open **http://localhost:5173** in your browser.
 
 | Action | XP |
 |---|---|
-| Commit (capped at 10/push) | +50 |
+| Unique commit SHA | +50 |
 | Open PR | +80 |
 | Merge PR | +120 |
 | Review PR | +60 |
@@ -129,6 +123,12 @@ Open **http://localhost:5173** in your browser.
 | Streak milestone (3/5/7/10/14/21/30 days) | +200 |
 
 All values are live-editable in `xp-config.json` — no restart needed.
+
+The leaderboard and counters reset at the start of each UTC month. Commit XP is awarded once per unique SHA. PR merge and issue close XP go to the person who performed the action.
+
+### Score repair
+
+`GET /api/repair/preview` returns a report and snapshot token without changing scores. Send that token as `{ "token": "..." }` to `POST /api/repair` to fill shortfalls below the counter-derived XP at the current rates. When `GITARENA_ADMIN_SECRET` is configured, both routes require `X-Admin-Secret`. Historical branch and streak bonuses cannot always be reconstructed, so excess XP is reported without automatic removal.
 
 ---
 
@@ -141,7 +141,7 @@ GitArena has a built-in demo mode with randomised live events — no GitHub toke
 export const CONFIG = { pat: 'demo', org: '', repos: [] };
 ```
 
-Then run `npm run dev` — you'll see a fully animated dashboard with fake team members and live activity.
+Then run `npm run dev` — you'll see a fully animated dashboard with fake team members and live activity. To run the backend and frontend together in demo mode, use `GITARENA_PAT=demo npm start`.
 
 ---
 
@@ -164,4 +164,3 @@ See [ROADMAP.md](ROADMAP.md) for planned features and how to contribute.
 ## License
 
 MIT © 2026 STM Societe Tangeroise de Maintenance
-

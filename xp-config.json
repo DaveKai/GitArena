@@ -20,7 +20,6 @@
     { "level": 8, "xp": 25000, "title": "legendary" }
   ],
   "streakMilestones": [3, 5, 7, 10, 14, 21, 30],
-  "maxCommitsPerPush": 10,
   "bossGoals": [
     { "label": "close 30 issues",  "metric": "issuesClosed", "target": 30 },
     { "label": "merge 20 PRs",     "metric": "prsMerged",    "target": 20 },
