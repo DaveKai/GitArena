@@ -17,7 +17,7 @@
 
 ## What is GitArena?
 
-GitArena polls your GitHub organisation every 10 seconds and turns every commit, PR, review, and issue into XP. It runs on a single server and displays a glanceable **1920×1080 dashboard** on a TV or monitor in your office.
+GitArena polls your GitHub organisation every 30 seconds and turns every commit, PR, review, and issue into XP. It runs on a single server and displays a glanceable **1920×1080 dashboard** on a TV or monitor in your office.
 
 **Key features:**
 
@@ -99,8 +99,8 @@ Vite also binds to `0.0.0.0`, so a TV on the same local network can open `http:/
 ┌──────────────────────▼───────────────────────────────┐
 │  Backend  (Express + tsx)                            │
 │                                                      │
-│  pollEvents()  ←  GitHub Events API  (every 10s)    │
-│  fullSync()    ←  GitHub Search API  (every 5min)   │
+│  pollEvents()  ←  GitHub Events API  (every 30s)   │
+│  fullSync()    ←  GitHub Search API  (every 15min)  │
 │                                                      │
 │  State persisted to server-state.json every 30s      │
 └──────────────────────────────────────────────────────┘

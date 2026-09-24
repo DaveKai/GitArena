@@ -239,11 +239,27 @@ function ghHeaders(etag?: string): Record<string, string> {
   return h;
 }
 
+const ghRateLimitedUntil: Record<'core' | 'search', number> = { core: 0, search: 0 };
+
 async function ghFetch(url: string, etag?: string): Promise<{ data: unknown; etag?: string; notModified: boolean; ok: boolean }> {
+  const resource = url.includes('/search/') ? 'search' : 'core';
+  if (Date.now() < ghRateLimitedUntil[resource]) return { data: null, etag, notModified: false, ok: false };
   const res = await fetch(url, { headers: ghHeaders(etag) });
   if (res.status === 304) return { data: null, etag, notModified: true, ok: true };
   if (!res.ok) {
-    console.warn(`[gh] ${res.status} ${url.split('?')[0]}`);
+    const error = (res.status === 403 || res.status === 429) ? await res.json().catch(() => null) as { message?: string } | null : null;
+    const limited = res.status === 429 || res.headers.get('x-ratelimit-remaining') === '0' || /rate limit/i.test(error?.message || '');
+    if (limited) {
+      const resetAt = Number(res.headers.get('x-ratelimit-reset')) * 1000;
+      const retryAfter = Number(res.headers.get('retry-after')) * 1000;
+      const until = Math.max(Date.now() + 60_000, Number.isFinite(resetAt) ? resetAt + 5_000 : 0, Number.isFinite(retryAfter) ? Date.now() + retryAfter : 0);
+      if (until > ghRateLimitedUntil[resource]) {
+        ghRateLimitedUntil[resource] = until;
+        console.warn(`[gh] ${resource} rate limit reached; retry after ${new Date(until).toISOString()}`);
+      }
+    } else {
+      console.warn(`[gh] ${res.status} ${url.split('?')[0]}`);
+    }
     return { data: null, etag, notModified: false, ok: false };
   }
   const data = await res.json();
@@ -620,6 +636,7 @@ function processIssueOrPR(item: Record<string, unknown>, repo: string): void {
 let reposFetched = false;
 let polling = false;
 let syncing = false;
+let repoPollCursor = 0;
 
 async function pollEvents(): Promise<void> {
   if (polling || syncing) return;
@@ -663,8 +680,11 @@ async function pollEvents(): Promise<void> {
     }
   } catch (err) { console.warn('[server] org events error:', err); }
 
-  // Per-repo events + recent activity (parallel batches of 5)
-  const reposToCheck = state.repos.slice(0, 20);
+  // Rotate through repositories instead of requesting every repo twice on
+  // every poll. Org events cover the gaps between per-repo checks.
+  const repoCount = Math.min(2, state.repos.length);
+  const reposToCheck = Array.from({ length: repoCount }, (_, i) => state.repos[(repoPollCursor + i) % state.repos.length]);
+  if (state.repos.length) repoPollCursor = (repoPollCursor + repoCount) % state.repos.length;
   const REPO_BATCH = 5;
   for (let i = 0; i < reposToCheck.length; i += REPO_BATCH) {
     const batch = reposToCheck.slice(i, i + REPO_BATCH);

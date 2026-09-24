@@ -25,6 +25,6 @@
     { "label": "merge 20 PRs",     "metric": "prsMerged",    "target": 20 },
     { "label": "hit 200 commits",  "metric": "commits",      "target": 200 }
   ],
-  "pollIntervalSeconds": 10,
-  "fullSyncIntervalSeconds": 300
+  "pollIntervalSeconds": 30,
+  "fullSyncIntervalSeconds": 900
 }
