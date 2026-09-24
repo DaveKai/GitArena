@@ -873,6 +873,10 @@ async function recordPushCommits(repo: string, ref: string, commits: PushCommit[
   const branch = await getDefaultBranch(repo);
   if (!branch) throw new Error(`Default branch unavailable for ${repo}`);
   const isDefault = ref === `refs/heads/${branch}`;
+  const linkedPrs = state.scoringVersion === 2 && !isDefault && commits.length
+    ? await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits/${commits[commits.length - 1].sha}/pulls`, 2)
+    : null;
+  const linkedPr = linkedPrs?.find(pr => pr.state === 'open' || Boolean(pr.merged_at));
   const unseen = commits.filter(commit => commit.sha && !creditedCommitShas.has(commit.sha));
   const byAuthor = new Map<string, PushCommit[]>();
   for (const commit of unseen) {
@@ -891,7 +895,7 @@ async function recordPushCommits(repo: string, ref: string, commits: PushCommit[
       addXp(login, eventXpValues().commit * authored.length, 'commit', repo, `shipped ${authored.length} commit${authored.length === 1 ? '' : 's'}`, authored[0]?.message, eventTime);
     } else if (!isDefault) {
       const name = ref.replace(/^refs\/heads\//, '');
-      addXp(login, 0, 'branch-push', repo, `pushed ${authored.length} commit${authored.length === 1 ? '' : 's'}`, `${name} · awaiting PR`, eventTime);
+      addXp(login, 0, 'branch-push', repo, `pushed ${authored.length} commit${authored.length === 1 ? '' : 's'}`, linkedPr ? `${name} · PR #${linkedPr.number} linked` : `${name} · awaiting PR`, eventTime);
     }
   }
   if (unseen.length) {
@@ -901,10 +905,8 @@ async function recordPushCommits(repo: string, ref: string, commits: PushCommit[
   if (state.scoringVersion === 2) {
     if (isDefault) {
       for (const commit of unseen) await reconcileDirectCommit(repo, commit.sha);
-    } else if (commits.length) {
-      const head = commits[commits.length - 1].sha;
-      const prs = await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits/${head}/pulls`, 2);
-      if (prs) for (const pr of prs) if (pr.state === 'open' && pr.number) await reconcilePr(repo, Number(pr.number));
+    } else if (linkedPrs) {
+      for (const pr of linkedPrs) if (pr.state === 'open' && pr.number) await reconcilePr(repo, Number(pr.number));
     }
   }
 }
