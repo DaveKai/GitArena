@@ -43,7 +43,7 @@ function Header({ isDemo, memberCount, now, periodStart, soundOn, onSound, onExp
     <div className="brand-mark"><ArenaIcon name="arena" size={27} /><span>GIT<span>ARENA</span></span></div><div className="header-rule" />
     <div className="season-label"><span className="eyebrow">THE BUILD SEASON</span><strong>{period.toLocaleString('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase()}</strong></div><div className="header-spacer" />
     <div className="broadcast-status"><span className="live-indicator" />{isDemo ? 'DEMO BROADCAST' : 'LIVE BROADCAST'}</div>
-    <div className="header-team"><ArenaIcon name="users" size={18} /> {memberCount} BUILDERS</div><div className="header-clock">{date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
+    <div className="header-team"><ArenaIcon name="users" size={18} /> {memberCount} BUILDERS</div><div className="header-clock" title="Mac system time (UTC)">{date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })} UTC</div>
     <button className="icon-button" onClick={onSound} title={soundOn ? 'Mute sound' : 'Enable sound'} aria-label={soundOn ? 'Mute sound' : 'Enable sound'}><ArenaIcon name={soundOn ? 'volume' : 'mute'} size={20} /></button>
     <button className="icon-button" onClick={onExpand} title="Fullscreen" aria-label="Fullscreen"><ArenaIcon name="expand" size={19} /></button>
   </header>;
@@ -54,18 +54,26 @@ function Standings({ members, stats }: { members: Member[]; stats: Record<string
   const rosterRef = useRef<HTMLDivElement>(null);
   const leadXp = sorted[0] ? stats[sorted[0].login]?.monthlyXp || 0 : 0;
   useEffect(() => {
+    const rail = rosterRef.current;
+    if (!rail) return;
+    const firstRun = rail.querySelector<HTMLElement>('.roster-sequence');
+    const runWidth = () => (firstRun?.getBoundingClientRect().width || 0) + 7;
+    const wrap = () => {
+      const width = runWidth();
+      if (sorted.length > 5 && width && rail.scrollLeft >= width) rail.scrollLeft -= width;
+    };
+    rail.addEventListener('scroll', wrap, { passive: true });
     const id = setInterval(() => {
-      const rail = rosterRef.current;
-      if (!rail || window.matchMedia('(prefers-reduced-motion: reduce)').matches || rail.matches(':hover') || rail.matches(':focus-within') || rail.scrollWidth <= rail.clientWidth) return;
-      const end = rail.scrollLeft >= rail.scrollWidth - rail.clientWidth - 5;
-      rail.scrollTo({ left: end ? 0 : rail.scrollLeft + 210, behavior: 'smooth' });
-    }, 4200);
-    return () => clearInterval(id);
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || rail.matches(':hover') || rail.matches(':focus-within') || runWidth() <= rail.clientWidth) return;
+      rail.scrollBy({ left: 210, behavior: 'smooth' });
+    }, 3200);
+    return () => { clearInterval(id); rail.removeEventListener('scroll', wrap); };
   }, [sorted.length]);
+  const rosterCards = (copy: boolean) => sorted.map((member, i) => <div className="roster-card" key={`${copy ? 'loop-' : ''}${member.login}`}><span>{String(i + 1).padStart(2, '0')}</span><Avatar member={member}/><div><strong>{member.name}</strong><small>{number(stats[member.login]?.monthlyXp || 0)} XP</small></div></div>);
   return <section className="arena-panel standings-panel"><div className="panel-heading"><div><span className="eyebrow">01 / THE COMPETITION</span><h1>THE STANDINGS<span className="title-dot">.</span></h1></div><span className="heading-aside">MONTHLY XP <span className="heading-count">{sorted.length.toString().padStart(2, '0')}</span></span></div>
     <div className="standings-list">{sorted.length === 0 && <div className="empty-state"><ArenaIcon name="users" size={36}/><strong>THE ARENA IS QUIET</strong><span>Activity will put your team on the board.</span></div>}
       {sorted.slice(0, 5).map((member, i) => { const s = stats[member.login]; const xp = s?.monthlyXp || 0; const progress = leadXp ? Math.max(3, xp / leadXp * 100) : 0; return <motion.div layout key={member.login} className={`standing-row ${i === 0 ? 'standing-row--leader' : ''}`} transition={{ layout: { duration: 0.65, type: 'spring', bounce: 0.12 } }}><span className="standing-rank">{String(i + 1).padStart(2, '0')}</span><Avatar member={member} large={i === 0}/><div className="standing-person"><div className="standing-name-line"><strong>{member.name}</strong>{i === 0 && <span className="leader-flag"><ArenaIcon name="trophy" size={13}/> THE LEADER</span>}</div><div className="standing-subline"><span>@{member.login}</span><span className="standing-bar"><span style={{ width: `${progress}%` }}/></span></div></div>{s?.streak ? <div className="standing-streak"><ArenaIcon name="flame" size={16}/>{s.streak}D</div> : null}<AnimatedScore xp={xp}/></motion.div>; })}</div>
-    {sorted.length > 0 && <div className="roster-section"><div className="roster-heading"><span>FULL ROSTER / {sorted.length} BUILDERS</span><div><button onClick={() => rosterRef.current?.scrollBy({ left: -250, behavior: 'smooth' })} aria-label="Scroll roster left">←</button><button onClick={() => rosterRef.current?.scrollBy({ left: 250, behavior: 'smooth' })} aria-label="Scroll roster right">→</button></div></div><div className="roster-rail" ref={rosterRef} tabIndex={0} aria-label="All ranked builders, scroll horizontally">{sorted.map((member, i) => <div className="roster-card" key={member.login}><span>{String(i + 1).padStart(2, '0')}</span><Avatar member={member}/><div><strong>{member.name}</strong><small>{number(stats[member.login]?.monthlyXp || 0)} XP</small></div></div>)}</div></div>}
+    {sorted.length > 0 && <div className="roster-section"><div className="roster-heading"><span>FULL ROSTER / {sorted.length} BUILDERS</span><div><button onClick={() => rosterRef.current?.scrollBy({ left: -250, behavior: 'smooth' })} aria-label="Scroll roster left">←</button><button onClick={() => rosterRef.current?.scrollBy({ left: 250, behavior: 'smooth' })} aria-label="Scroll roster right">→</button></div></div><div className="roster-rail" ref={rosterRef} tabIndex={0} aria-label="All ranked builders, scroll horizontally"><div className="roster-track"><div className="roster-sequence">{rosterCards(false)}</div>{sorted.length > 5 && <div className="roster-sequence" aria-hidden="true">{rosterCards(true)}</div>}</div></div></div>}
     <div className="standings-foot"><span>EVERY CONTRIBUTION COUNTS</span><span>RANKINGS UPDATE LIVE ↗</span></div>
   </section>;
 }
@@ -76,11 +84,27 @@ function Mission({ progress, goal, teamXp, complete }: { progress: number; goal:
 }
 
 function Activity({ feed, members, now }: { feed: FeedItem[]; members: Member[]; now: number }) {
-  return <section className="arena-panel activity-panel"><div className="activity-heading"><div><span className="eyebrow">02 / THE PULSE</span><h2>RECENT ACTIVITY<span className="title-dot">.</span></h2></div><span className="activity-live"><span className="live-indicator"/> LIVE</span></div><div className="activity-list">{feed.length === 0 && <div className="empty-state"><ArenaIcon name="git" size={34}/><strong>WAITING FOR THE FIRST MOVE</strong><span>New commits, reviews, and wins appear here.</span></div>}
-    <AnimatePresence initial={false}>{feed.slice(0, 5).map((item, i) => <motion.div layout key={item.id} className={`activity-row ${i === 0 ? 'activity-row--first' : ''}`} initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.35 }}><div className={`event-symbol event-symbol--${item.type}`}><ArenaIcon name={eventIcons[item.type] || 'spark'} size={21}/></div><div className="activity-copy"><div className="activity-line"><strong>{members.find(m => m.login === item.user)?.name || item.user}</strong><span>{item.message}</span></div><div className="activity-detail">{item.detail || item.repo || 'Team activity'}</div></div><div className="activity-meta"><strong>{item.xp > 0 ? `+${item.xp}` : '—'} <span>XP</span></strong><span>{elapsed(item.time, now)}</span></div></motion.div>)}</AnimatePresence></div></section>;
+  const listRef = useRef<HTMLDivElement>(null);
+  const recent = feed.slice(0, 8);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const firstRun = list.querySelector<HTMLElement>('.activity-sequence');
+    const runHeight = () => firstRun?.getBoundingClientRect().height || 0;
+    list.scrollTop = 0;
+    const wrap = () => { const height = runHeight(); if (recent.length > 3 && height && list.scrollTop >= height) list.scrollTop -= height; };
+    list.addEventListener('scroll', wrap, { passive: true });
+    const id = setInterval(() => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || list.matches(':hover') || list.matches(':focus-within') || runHeight() <= list.clientHeight) return;
+      list.scrollBy({ top: firstRun?.querySelector('.activity-row')?.getBoundingClientRect().height || 68, behavior: 'smooth' });
+    }, 3600);
+    return () => { clearInterval(id); list.removeEventListener('scroll', wrap); };
+  }, [recent.length, recent[0]?.id]);
+  const rows = (copy: boolean) => recent.map((item, i) => <motion.div layout key={`${copy ? 'loop-' : ''}${item.id}`} className={`activity-row ${i === 0 ? 'activity-row--first' : ''}`} initial={copy ? false : { opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.35 }}><div className={`event-symbol event-symbol--${item.type}`}><ArenaIcon name={eventIcons[item.type] || 'spark'} size={21}/></div><div className="activity-copy"><div className="activity-line"><strong>{members.find(m => m.login === item.user)?.name || item.user}</strong><span>{item.message}</span></div><div className="activity-detail">{item.detail || item.repo || 'Team activity'}</div></div><div className="activity-meta"><strong>{item.xp > 0 ? `+${item.xp}` : '—'} <span>XP</span></strong><span>{elapsed(item.time, now)}</span></div></motion.div>);
+  return <section className="arena-panel activity-panel"><div className="activity-heading"><div><span className="eyebrow">02 / THE PULSE</span><h2>RECENT ACTIVITY<span className="title-dot">.</span></h2></div><span className="activity-live"><span className="live-indicator"/> LIVE</span></div><div className="activity-list" ref={listRef} tabIndex={0} aria-label="Recent activity, scroll vertically">{recent.length === 0 ? <div className="empty-state"><ArenaIcon name="git" size={34}/><strong>WAITING FOR THE FIRST MOVE</strong><span>New commits, reviews, and wins appear here.</span></div> : <div className="activity-track"><div className="activity-sequence"><AnimatePresence initial={false}>{rows(false)}</AnimatePresence></div>{recent.length > 3 && <div className="activity-sequence" aria-hidden="true">{rows(true)}</div>}</div>}</div></section>;
 }
 
-function Metric({ label, value, icon }: { label: string; value: number; icon: IconName }) { return <div className="feature-metric"><ArenaIcon name={icon} size={24}/><strong>{number(value)}</strong><span>{label}</span></div>; }
+function Metric({ label, value, icon }: { label: string; value: number; icon: IconName }) { return <div className="feature-metric"><ArenaIcon name={icon} size={24}/><strong>{value >= 100000 ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value) : number(value)}</strong><span>{label}</span></div>; }
 
 function Feature({ mode, members, stats, feed, shamePRs }: { mode: number; members: Member[]; stats: Record<string, DevStats>; feed: FeedItem[]; shamePRs: ShamePR[] }) {
   const sorted = [...members].sort((a, b) => (stats[b.login]?.monthlyXp || 0) - (stats[a.login]?.monthlyXp || 0));
@@ -119,7 +143,7 @@ export default function App() {
   const [soundChoice, setSoundChoice] = useState<boolean | null>(() => { const value = localStorage.getItem('gitarena-sound'); return value === 'on' ? true : value === 'off' ? false : null; });
   const previousFeedId = useRef<string | null>(null), previousOverlay = useRef<string | null>(null);
   const complete = bossGoals.length > 0 && bossIndex >= bossGoals.length;
-  const goal = complete ? { label: 'ALL OBJECTIVES COMPLETE', metric: 'complete', target: 1 } : bossGoals[bossIndex] || { label: 'NO OBJECTIVE SET', metric: 'none', target: 1 };
+  const goal = complete ? { label: 'ALL GOALS COMPLETE', metric: 'complete', target: 1 } : bossGoals[bossIndex] || { label: 'NO OBJECTIVE SET', metric: 'none', target: 1 };
   const teamXp = Object.values(stats).reduce((n, s) => n + s.monthlyXp, 0);
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(id); }, []);
   useEffect(() => { if (!isDemo) return; const id = setInterval(checkMonthlyReset, 60000); return () => clearInterval(id); }, [isDemo, checkMonthlyReset]);
