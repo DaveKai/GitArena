@@ -17,7 +17,7 @@
 
 ## What is GitArena?
 
-GitArena polls your GitHub organisation every 30 seconds and turns every commit, PR, review, and issue into XP. It runs on a single server and displays a glanceable **1920×1080 dashboard** on a TV or monitor in your office.
+GitArena checks GitHub activity every 30 seconds and turns eligible code changes, PRs, reviews, and issues into XP. It runs on a single server and displays a glanceable **1920×1080 dashboard** on a TV or monitor in your office.
 
 **Key features:**
 
@@ -124,6 +124,8 @@ Vite also binds to `0.0.0.0`, so a TV on the same local network can open `http:/
 | Streak milestone (3/5/7/10/14/21/30 days) | +200 |
 
 Code XP depends on eligible changed lines and files. A diff of at least 100 changed lines across at least three files receives the full award; lines determine 75% of the scale and files 25%. Generated directories, lockfiles and minified assets listed in `xp-config.json` do not count. Opening a PR gives provisional code and opening XP. Updating its diff adjusts those awards; closing it without merging removes them. Merge XP goes to the merger, while code XP is split among commit authors by eligible contribution. A commit associated with a PR is not also paid as a direct push. Reviews, issues, branches and streaks keep their configured rates.
+
+Pushing to a feature branch updates commit counters and appears in Recent Activity as **Pending PR**. Code XP is awarded when that branch has an open PR. Direct pushes to the default branch are scored immediately. The server checks recently pushed repositories and their branch heads each minute; GitHub's event feed provides additional reconciliation when it catches up.
 
 The `scoring` block in `xp-config.json` controls the diff formula and file exclusions. The zero `commit`, `prOpened` and `prMerged` flat rates in `xpValues` are intentional. `legacyXpValues` is used only before migration of an existing state file.
 

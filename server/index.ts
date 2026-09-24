@@ -94,6 +94,10 @@ interface ServerState {
   monthStartDate: string;
   seenIds: string[];
   creditedCommitShas?: string[];
+  processedPushIds?: string[];
+  pushReplayDoneRepos?: string[];
+  repoPushedAt?: Record<string, string>;
+  branchHeads?: Record<string, string>;
   commitLedgerSeeded?: boolean;
   dailyStartDate?: string;
   etags: Record<string, string>;
@@ -230,7 +234,7 @@ function loadServerState(): ServerState {
     bossProgress: {}, bossIndex: 0, previousRanks: {},
     belts: { reviewer: null, closer: null, speedKing: null },
     shamePRs: [], monthStartDate: monthStart(),
-    seenIds: [], creditedCommitShas: [], commitLedgerSeeded: true, dailyStartDate: todayStr(), etags: {}, repos: [],
+    seenIds: [], creditedCommitShas: [], processedPushIds: [], pushReplayDoneRepos: [], repoPushedAt: {}, branchHeads: {}, commitLedgerSeeded: true, dailyStartDate: todayStr(), etags: {}, repos: [],
     scoringVersion: 2, scoringEpoch: monthStart(),
     scoreLedger: {}, commitDiffCache: {}, prDiffCache: {}, commitPrCache: {}, defaultBranches: {},
   };
@@ -243,6 +247,11 @@ for (const s of Object.values(state.stats)) {
 }
 const seenIds = new Set<string>(state.seenIds || []);
 const creditedCommitShas = new Set<string>(state.creditedCommitShas || []);
+const processedPushIds = new Set<string>(state.processedPushIds || []);
+const pushReplayDoneRepos = new Set<string>(state.pushReplayDoneRepos || []);
+const serverStartedAt = new Date().toISOString();
+state.repoPushedAt ||= {};
+state.branchHeads ||= {};
 state.scoreLedger ||= {};
 state.commitDiffCache ||= {};
 state.prDiffCache ||= {};
@@ -261,6 +270,9 @@ function persistState(): void {
   if (eventIds.length > 3000) for (const id of eventIds.slice(0, -3000)) seenIds.delete(id);
   state.seenIds = [...seenIds];
   state.creditedCommitShas = [...creditedCommitShas];
+  if (processedPushIds.size > 5000) for (const id of [...processedPushIds].slice(0, processedPushIds.size - 5000)) processedPushIds.delete(id);
+  state.processedPushIds = [...processedPushIds];
+  state.pushReplayDoneRepos = [...pushReplayDoneRepos];
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(STATE_PATH, JSON.stringify(state), 'utf-8');
@@ -689,7 +701,8 @@ function addXp(login: string, amount: number, type: string, repo: string, messag
   const oldLevel = getLevel(s.totalXp).level;
   s.monthlyXp += amount;
   s.totalXp += amount;
-  s.lastActivityTime = eventTime || new Date().toISOString();
+  const activityTime = eventTime || new Date().toISOString();
+  if (!s.lastActivityTime || activityTime > s.lastActivityTime) s.lastActivityTime = activityTime;
   state.stats[login] = s;
 
   const feedItem: FeedItem = {
@@ -830,6 +843,100 @@ function checkMonthlyReset(): void {
 }
 
 // ── GitHub polling ───────────────────────────────
+interface PushCommit { sha: string; login?: string; message?: string }
+
+async function comparePushCommits(repo: string, before: string, head: string): Promise<PushCommit[] | null> {
+  if (before === head) return [];
+  const commits: PushCommit[] = [];
+  for (let page = 1; page <= 30; page++) {
+    const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/compare/${before}...${head}?per_page=100&page=${page}`;
+    const result = await ghFetch(url);
+    if (!result.ok || !result.data) return null;
+    const data = result.data as Record<string, unknown>;
+    if (!Array.isArray(data.commits)) return null;
+    const batch = data.commits as Array<Record<string, unknown>>;
+    for (const item of batch) {
+      const sha = String(item.sha || '');
+      if (!sha) continue;
+      const commit = item.commit as Record<string, unknown> | undefined;
+      commits.push({ sha,
+        login: (item.author as Record<string, string> | undefined)?.login || (item.committer as Record<string, string> | undefined)?.login,
+        message: String(commit?.message || '').split('\n')[0],
+      });
+    }
+    if (commits.length >= Number(data.total_commits || 0) || batch.length < 100) return commits;
+  }
+  return null;
+}
+
+async function recordPushCommits(repo: string, ref: string, commits: PushCommit[], actor: string, avatarUrl: string, eventTime: string): Promise<void> {
+  const branch = await getDefaultBranch(repo);
+  if (!branch) throw new Error(`Default branch unavailable for ${repo}`);
+  const isDefault = ref === `refs/heads/${branch}`;
+  const unseen = commits.filter(commit => commit.sha && !creditedCommitShas.has(commit.sha));
+  const byAuthor = new Map<string, PushCommit[]>();
+  for (const commit of unseen) {
+    creditedCommitShas.add(commit.sha);
+    const login = commit.login || actor;
+    if (isBot(login)) continue;
+    byAuthor.set(login, [...(byAuthor.get(login) || []), commit]);
+  }
+  for (const [login, authored] of byAuthor) {
+    ensureMember(login, login === actor ? avatarUrl : '');
+    incrementStat(login, 'monthlyCommits', authored.length);
+    if (eventTime.slice(0, 10) === todayStr()) incrementStat(login, 'dailyCommits', authored.length);
+    if (!state.stats[login].lastCommitDate || eventTime > state.stats[login].lastCommitDate!) state.stats[login].lastCommitDate = eventTime;
+    bumpStreak(login, eventTime);
+    if (state.scoringVersion !== 2) {
+      addXp(login, eventXpValues().commit * authored.length, 'commit', repo, `shipped ${authored.length} commit${authored.length === 1 ? '' : 's'}`, authored[0]?.message, eventTime);
+    } else if (!isDefault) {
+      const name = ref.replace(/^refs\/heads\//, '');
+      addXp(login, 0, 'branch-push', repo, `pushed ${authored.length} commit${authored.length === 1 ? '' : 's'}`, `${name} · awaiting PR`, eventTime);
+    }
+  }
+  if (unseen.length) {
+    const commitTotal = Object.values(state.stats).reduce((sum, stats) => sum + stats.monthlyCommits, 0);
+    state.bossProgress.commits = Math.max(state.bossProgress.commits || 0, commitTotal);
+  }
+  if (state.scoringVersion === 2) {
+    if (isDefault) {
+      for (const commit of unseen) await reconcileDirectCommit(repo, commit.sha);
+    } else if (commits.length) {
+      const head = commits[commits.length - 1].sha;
+      const prs = await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits/${head}/pulls`, 2);
+      if (prs) for (const pr of prs) if (pr.state === 'open' && pr.number) await reconcilePr(repo, Number(pr.number));
+    }
+  }
+}
+
+async function processPushEvent(event: Record<string, unknown>): Promise<boolean> {
+  const actorObj = event.actor as Record<string, string> | undefined;
+  const actor = actorObj?.login || '';
+  const repo = String((event.repo as Record<string, string> | undefined)?.name || '').split('/').pop() || '';
+  const payload = event.payload as Record<string, unknown> | undefined;
+  const ref = String(payload?.ref || '');
+  const eventTime = String(event.created_at || new Date().toISOString());
+  if (!actor || isBot(actor) || !repo || (GH_REPOS.length && !GH_REPOS.includes(repo)) || eventTime < state.monthStartDate || !ref.startsWith('refs/heads/')) return true;
+  const head = String(payload?.head || '');
+  const before = String(payload?.before || '');
+  if (!/^[0-9a-f]{40}$/i.test(head) || !/^[0-9a-f]{40}$/i.test(before)) return false;
+  let commits: PushCommit[] | null;
+  if (Array.isArray(payload?.commits) && payload.commits.length) {
+    commits = (payload.commits as Array<Record<string, unknown>>).map(item => ({
+      sha: String(item.sha || ''),
+      login: (item.author as Record<string, string> | undefined)?.username,
+      message: String(item.message || '').split('\n')[0],
+    })).filter(item => item.sha);
+  } else {
+    let base = before;
+    if (/^0+$/.test(base)) base = await getDefaultBranch(repo) || '';
+    commits = base ? await comparePushCommits(repo, base, head) : null;
+  }
+  if (!commits) return false;
+  await recordPushCommits(repo, ref, commits, actor, actorObj?.avatar_url || '', eventTime);
+  return true;
+}
+
 function processEvent(event: Record<string, unknown>): void {
   const xp = eventXpValues();
   const scored = state.scoringVersion === 2;
@@ -848,43 +955,6 @@ function processEvent(event: Record<string, unknown>): void {
   ensureMember(actor, avatarUrl);
 
   switch (type) {
-    case 'PushEvent': {
-      const commits = (payload.commits as Array<{ sha?: string; message?: string; author?: { username?: string } }>) || [];
-      const newCommits = commits.filter(commit => {
-        if (!commit.sha || creditedCommitShas.has(commit.sha)) return false;
-        creditedCommitShas.add(commit.sha);
-        return true;
-      });
-      if (newCommits.length > 0) {
-        const byAuthor = new Map<string, typeof newCommits>();
-        for (const commit of newCommits) {
-          const login = commit.author?.username || actor;
-          if (isBot(login)) continue;
-          byAuthor.set(login, [...(byAuthor.get(login) || []), commit]);
-        }
-        for (const [login, authored] of byAuthor) {
-          const msg = authored[0]?.message?.split('\n')[0] || 'pushed code';
-          if (!scored) addXp(login, xp.commit * authored.length, 'commit', repo, `shipped ${authored.length} commit${authored.length > 1 ? 's' : ''}`, msg, eventTime);
-          incrementStat(login, 'monthlyCommits', authored.length);
-          if (!eventTime || eventTime.slice(0, 10) === todayStr()) incrementStat(login, 'dailyCommits', authored.length);
-          state.stats[login].lastCommitDate = eventTime || new Date().toISOString();
-          bumpStreak(login, eventTime);
-        }
-        if (scored && repo) {
-          const ref = String(payload.ref || '');
-          void getDefaultBranch(repo).then(branch => {
-            if (branch && ref === `refs/heads/${branch}`) for (const commit of newCommits) void reconcileDirectCommit(repo, commit.sha!);
-          }).catch(err => console.warn(`[server] Could not check default branch for ${repo}:`, err));
-        }
-        // Fetch line stats via compare API in the legacy scoring mode.
-        const before = payload.before as string;
-        const head = payload.head as string;
-        if (!scored && before && head && repo) {
-          fetchPushLineStats(actor, repo, before, head).catch(() => {});
-        }
-      }
-      break;
-    }
     case 'CreateEvent': {
       const refType = payload.ref_type as string;
       if (refType === 'branch') {
@@ -1003,12 +1073,77 @@ function processIssueOrPR(item: Record<string, unknown>, repo: string): void {
   }
 }
 
-let reposFetched = false;
 let polling = false;
 let syncing = false;
 let migrationRunning = false;
 let lastDirectSweep = 0;
 let repoPollCursor = 0;
+let lastRepoRefresh = 0;
+
+async function scanBranchHeads(repo: string): Promise<boolean> {
+  const branches = await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/branches`, 30);
+  if (!branches) return false;
+  const bootstrapCutoff = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
+  for (let i = 0; i < branches.length; i += 10) {
+    const batch = branches.slice(i, i + 10);
+    const candidates = await Promise.all(batch.map(async item => {
+      const name = String(item.name || '');
+      const sha = String((item.commit as Record<string, string> | undefined)?.sha || '');
+      if (!name || !sha) return null;
+      const key = `${repo}:${name}`;
+      const previous = state.branchHeads![key];
+      if (previous === sha) return null;
+      if (previous) {
+        const commits = await comparePushCommits(repo, previous, sha);
+        if (!commits) {
+          const diff = await getCommitDiff(repo, sha);
+          if (!diff) return { key, sha, name, retry: true };
+          return { key, sha, name, commits: [{ sha, login: diff.login, message: diff.title }], actor: diff.login || '', time: new Date().toISOString() };
+        }
+        return { key, sha, name, commits, actor: commits[commits.length - 1]?.login || '', time: new Date().toISOString() };
+      }
+      const diff = await getCommitDiff(repo, sha);
+      if (!diff) return { key, sha, name, retry: true };
+      return { key, sha, name, commits: diff.time && diff.time >= bootstrapCutoff ? [{ sha, login: diff.login, message: diff.title }] : [], actor: diff.login || '', time: diff.time || new Date().toISOString() };
+    }));
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      if ('retry' in candidate) return false;
+      if (candidate.commits.length && candidate.actor) {
+        await recordPushCommits(repo, `refs/heads/${candidate.name}`, candidate.commits, candidate.actor, '', candidate.time);
+      }
+      state.branchHeads![candidate.key] = candidate.sha;
+    }
+  }
+  return true;
+}
+
+async function refreshHotRepositories(): Promise<void> {
+  if (Date.now() - lastRepoRefresh < 60_000) return;
+  lastRepoRefresh = Date.now();
+  let repos: Array<Record<string, unknown>> | null;
+  if (GH_REPOS.length) {
+    const results = await Promise.all(GH_REPOS.map(repo => ghFetch(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}`)));
+    repos = results.every(result => result.ok && result.data) ? results.map(result => result.data as Record<string, unknown>) : null;
+  } else {
+    repos = await ghList(`${BASE}/orgs/${encodeURIComponent(GH_ORG)}/repos?sort=pushed`, 10);
+  }
+  if (!repos) return;
+  const sorted = repos.filter(repo => typeof repo.name === 'string').sort((a, b) => String(b.pushed_at || '').localeCompare(String(a.pushed_at || '')));
+  state.repos = sorted.map(repo => String(repo.name));
+  const cutoff = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
+  const changed = sorted.filter(repo => {
+    const name = String(repo.name);
+    const pushed = String(repo.pushed_at || '');
+    return pushed >= cutoff && pushed > (state.repoPushedAt![name] || '');
+  }).slice(0, 6);
+  for (const repo of changed) {
+    const name = String(repo.name);
+    try {
+      if (await scanBranchHeads(name)) state.repoPushedAt![name] = String(repo.pushed_at);
+    } catch (err) { console.warn(`[server] Could not scan branch heads for ${name}:`, err); }
+  }
+}
 
 async function pollEvents(): Promise<void> {
   if (polling || syncing || migrationRunning) return;
@@ -1017,22 +1152,26 @@ async function pollEvents(): Promise<void> {
   reloadConfigIfChanged();
   checkMonthlyReset();
 
-  // Fetch repos if needed (optional — org events cover all repos anyway)
-  if (state.repos.length === 0 && !reposFetched) {
-    reposFetched = true;
-    if (GH_REPOS.length > 0) {
-      state.repos = GH_REPOS;
-    } else {
-      const { data, ok } = await ghFetch(`${BASE}/orgs/${encodeURIComponent(GH_ORG)}/repos?per_page=100&sort=pushed`);
-      if (ok && Array.isArray(data)) {
-        state.repos = data.map((r: Record<string, string>) => r.name);
-        console.log(`[server] Discovered ${state.repos.length} repos`);
-      }
-      // Not fatal — org events endpoint covers all repos
-    }
-  }
+  await refreshHotRepositories();
 
   let eventsProcessed = 0;
+
+  const ingest = async (event: Record<string, unknown>): Promise<boolean> => {
+    const id = String(event.id || '');
+    if (!id) return false;
+    if (event.type === 'PushEvent') {
+      if (processedPushIds.has(id)) return false;
+      try {
+        if (!await processPushEvent(event)) return false;
+        processedPushIds.add(id);
+      } catch (err) { console.warn(`[server] Could not process push event ${id}:`, err); return false; }
+    } else {
+      if (seenIds.has(id)) return false;
+      processEvent(event);
+    }
+    seenIds.add(id);
+    return true;
+  };
 
   // Org events
   try {
@@ -1043,11 +1182,7 @@ async function pollEvents(): Promise<void> {
     state.etags['__org__'] = etag || '';
     if (!notModified && Array.isArray(data)) {
       for (const event of [...data].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))) {
-        const id = event.id as string;
-        if (seenIds.has(id)) continue;
-        seenIds.add(id);
-        processEvent(event);
-        eventsProcessed++;
+        if (await ingest(event)) eventsProcessed++;
       }
     }
   } catch (err) { console.warn('[server] org events error:', err); }
@@ -1055,7 +1190,9 @@ async function pollEvents(): Promise<void> {
   // Rotate through repositories instead of requesting every repo twice on
   // every poll. Org events cover the gaps between per-repo checks.
   const repoCount = Math.min(2, state.repos.length);
-  const reposToCheck = Array.from({ length: repoCount }, (_, i) => state.repos[(repoPollCursor + i) % state.repos.length]);
+  const rotatingRepos = Array.from({ length: repoCount }, (_, i) => state.repos[(repoPollCursor + i) % state.repos.length]);
+  const replayRepos = state.repos.filter(repo => state.repoPushedAt?.[repo] && !pushReplayDoneRepos.has(repo)).slice(0, 6);
+  const reposToCheck = [...new Set([...replayRepos, ...rotatingRepos])];
   if (state.repos.length) repoPollCursor = (repoPollCursor + repoCount) % state.repos.length;
   const REPO_BATCH = 5;
   for (let i = 0; i < reposToCheck.length; i += REPO_BATCH) {
@@ -1064,19 +1201,23 @@ async function pollEvents(): Promise<void> {
 
     await Promise.allSettled(batch.map(async (repo) => {
       try {
+        const replay = replayRepos.includes(repo);
         const { data, etag, notModified } = await ghFetch(
           `${BASE}/repos/${encodeURIComponent(GH_ORG)}/${encodeURIComponent(repo)}/events?per_page=100`,
-          state.etags[repo],
+          replay ? undefined : state.etags[repo],
         );
         state.etags[repo] = etag || '';
         if (!notModified && Array.isArray(data)) {
+          let replayComplete = true;
           for (const event of [...data].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))) {
-            const id = event.id as string;
-            if (seenIds.has(id)) continue;
-            seenIds.add(id);
-            processEvent(event);
-            eventsProcessed++;
+            if (replay && event.type !== 'PushEvent' && !seenIds.has(String(event.id)) && String(event.created_at || '') < serverStartedAt) {
+              seenIds.add(String(event.id));
+              continue;
+            }
+            if (await ingest(event)) eventsProcessed++;
+            if (replay && event.type === 'PushEvent' && !processedPushIds.has(String(event.id))) replayComplete = false;
           }
+          if (replay && replayComplete) pushReplayDoneRepos.add(repo);
         }
       } catch { /* ignore */ }
 

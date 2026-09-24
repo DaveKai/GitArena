@@ -115,6 +115,7 @@ button:focus-visible { outline: 2px solid #dcfa6b; outline-offset: 3px; }
 .event-symbol { width: 42px; height: 42px; display: grid; place-items: center; flex: none; color: #8ebcc9; background: #243539; border: 1px solid #38525a; }
 .event-symbol--pr-merged, .event-symbol--issue { color: var(--acid); background: #2d3b27; border-color: #64783b; }
 .event-symbol--review { color: #b7a8ed; background: #302d44; border-color: #514d76; }
+.event-symbol--branch-push { color: #8fbab3; background: #203633; border-color: #41635d; }
 .event-symbol--pr-opened, .event-symbol--issue-opened { color: #e7c48e; background: #393127; border-color: #695541; }
 .activity-copy { flex: 1; min-width: 0; }
 .activity-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 17px; }
