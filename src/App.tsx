@@ -52,7 +52,31 @@ function Header({ isDemo, memberCount, now, periodStart, soundOn, onSound, onExp
 function Standings({ members, stats }: { members: Member[]; stats: Record<string, DevStats> }) {
   const sorted = useMemo(() => [...members].sort((a, b) => (stats[b.login]?.monthlyXp || 0) - (stats[a.login]?.monthlyXp || 0) || a.login.localeCompare(b.login)), [members, stats]);
   const rosterRef = useRef<HTMLDivElement>(null);
+  const tailRef = useRef<HTMLDivElement>(null);
+  const tail = sorted.slice(3);
   const leadXp = sorted[0] ? stats[sorted[0].login]?.monthlyXp || 0 : 0;
+  useEffect(() => {
+    const viewport = tailRef.current;
+    if (!viewport) return;
+    const firstRun = viewport.querySelector<HTMLElement>('.standings-tail-sequence');
+    const visibleCount = Math.min(2, tail.length);
+    const rowHeight = () => viewport.clientHeight / visibleCount;
+    const updateSize = () => viewport.style.setProperty('--tail-row-height', `${rowHeight()}px`);
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(viewport);
+    updateSize();
+    viewport.scrollTop = 0;
+    const wrap = () => {
+      const runHeight = firstRun?.getBoundingClientRect().height || 0;
+      if (tail.length > 2 && runHeight && viewport.scrollTop >= runHeight) viewport.scrollTop -= runHeight;
+    };
+    viewport.addEventListener('scroll', wrap, { passive: true });
+    const id = setInterval(() => {
+      if (tail.length <= 2) return;
+      viewport.scrollBy({ top: rowHeight(), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    }, 4200);
+    return () => { clearInterval(id); viewport.removeEventListener('scroll', wrap); observer.disconnect(); };
+  }, [tail.length]);
   useEffect(() => {
     const rail = rosterRef.current;
     if (!rail) return;
@@ -75,9 +99,16 @@ function Standings({ members, stats }: { members: Member[]; stats: Record<string
     return () => { clearInterval(id); rail.removeEventListener('scroll', wrap); observer.disconnect(); };
   }, [sorted.length]);
   const rosterCards = (copy: boolean) => sorted.map((member, i) => <div className="roster-card" key={`${copy ? 'loop-' : ''}${member.login}`}><span>{String(i + 1).padStart(2, '0')}</span><Avatar member={member}/><div><strong>{member.name}</strong><small>{number(stats[member.login]?.monthlyXp || 0)} XP</small></div></div>);
+  const standingRow = (member: Member, rank: number, copy = false) => {
+    const s = stats[member.login];
+    const xp = s?.monthlyXp || 0;
+    const progress = leadXp ? Math.max(3, xp / leadXp * 100) : 0;
+    return <motion.div layout={!copy && rank < 3} key={`${copy ? 'loop-' : ''}${member.login}`} className={`standing-row ${rank === 0 ? 'standing-row--leader' : ''}`} transition={{ layout: { duration: 0.65, type: 'spring', bounce: 0.12 } }}><span className="standing-rank">{String(rank + 1).padStart(2, '0')}</span><Avatar member={member} large={rank === 0}/><div className="standing-person"><div className="standing-name-line"><strong>{member.name}</strong>{rank === 0 && <span className="leader-flag"><ArenaIcon name="trophy" size={13}/> THE LEADER</span>}</div><div className="standing-subline"><span>@{member.login}</span><span className="standing-bar"><span style={{ width: `${progress}%` }}/></span></div></div>{s?.streak ? <div className="standing-streak"><ArenaIcon name="flame" size={16}/>{s.streak}D</div> : null}<AnimatedScore xp={xp}/></motion.div>;
+  };
   return <section className="arena-panel standings-panel"><div className="panel-heading"><div><span className="eyebrow">01 / THE COMPETITION</span><h1>THE STANDINGS<span className="title-dot">.</span></h1></div><span className="heading-aside">MONTHLY XP <span className="heading-count">{sorted.length.toString().padStart(2, '0')}</span></span></div>
     <div className="standings-list">{sorted.length === 0 && <div className="empty-state"><ArenaIcon name="users" size={36}/><strong>THE ARENA IS QUIET</strong><span>Activity will put your team on the board.</span></div>}
-      {sorted.slice(0, 5).map((member, i) => { const s = stats[member.login]; const xp = s?.monthlyXp || 0; const progress = leadXp ? Math.max(3, xp / leadXp * 100) : 0; return <motion.div layout key={member.login} className={`standing-row ${i === 0 ? 'standing-row--leader' : ''}`} transition={{ layout: { duration: 0.65, type: 'spring', bounce: 0.12 } }}><span className="standing-rank">{String(i + 1).padStart(2, '0')}</span><Avatar member={member} large={i === 0}/><div className="standing-person"><div className="standing-name-line"><strong>{member.name}</strong>{i === 0 && <span className="leader-flag"><ArenaIcon name="trophy" size={13}/> THE LEADER</span>}</div><div className="standing-subline"><span>@{member.login}</span><span className="standing-bar"><span style={{ width: `${progress}%` }}/></span></div></div>{s?.streak ? <div className="standing-streak"><ArenaIcon name="flame" size={16}/>{s.streak}D</div> : null}<AnimatedScore xp={xp}/></motion.div>; })}</div>
+      {sorted.slice(0, 3).map((member, i) => standingRow(member, i))}
+      {tail.length > 0 && <div className="standings-tail" ref={tailRef} style={{ flex: `${Math.min(2, tail.length)} 0 ${48 * Math.min(2, tail.length)}px` }} aria-label="Ranks four and below, rotating automatically"><div className="standings-tail-sequence">{tail.map((member, i) => standingRow(member, i + 3))}</div>{tail.length > 2 && <div className="standings-tail-sequence" aria-hidden="true">{tail.map((member, i) => standingRow(member, i + 3, true))}</div>}</div>}</div>
     {sorted.length > 0 && <div className="roster-section"><div className="roster-heading"><span>FULL ROSTER / {sorted.length} BUILDERS</span><span className="roster-heading-status">ROTATING RANKINGS ↗</span></div><div className="roster-rail" ref={rosterRef} aria-label="All ranked builders"><div className="roster-track"><div className="roster-sequence">{rosterCards(false)}</div><div className="roster-sequence" aria-hidden="true">{rosterCards(true)}</div></div></div></div>}
     <div className="standings-foot"><span>EVERY CONTRIBUTION COUNTS</span><span>RANKINGS UPDATE LIVE ↗</span></div>
   </section>;

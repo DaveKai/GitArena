@@ -44,7 +44,10 @@ button:focus-visible { outline: 2px solid #dcfa6b; outline-offset: 3px; }
 .panel-heading h1 { font-size: clamp(27px, 2.4vw, 43px); }
 .heading-aside { display: flex; align-items: center; gap: 13px; color: #91a09a; font: 600 12px 'Geist Mono Variable', monospace; letter-spacing: .1em; }
 .heading-count { color: var(--acid); font-size: 25px; letter-spacing: -.06em; }
-.standings-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #79924d transparent; display: flex; flex-direction: column; }
+.standings-list { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.standings-tail { min-height: 0; overflow: hidden; }
+.standings-tail-sequence { display: flex; flex-direction: column; }
+.standings-tail-sequence .standing-row { height: var(--tail-row-height, 54px); min-height: 0; flex: none; }
 .standing-row { display: flex; align-items: center; min-height: 54px; flex: 1 0 54px; gap: 19px; padding: 0 24px; border-bottom: 1px solid rgba(163,191,176,.12); position: relative; }
 .standing-row--leader { min-height: 70px; flex: 1.43 0 70px; background: linear-gradient(95deg, rgba(220,250,107,.14), rgba(220,250,107,.035) 72%, transparent); }
 .standing-row--leader::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--acid); }
