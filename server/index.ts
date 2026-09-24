@@ -8,7 +8,11 @@ import { fileURLToPath } from 'url';
 // ── Paths ────────────────────────────────────────
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, '..', 'xp-config.json');
-const STATE_PATH = path.join(__dirname, '..', 'server-state.json');
+const LEGACY_STATE_PATH = path.join(__dirname, '..', 'server-state.json');
+const DATA_DIR = process.env.GITARENA_DATA_DIR || (process.env.NODE_ENV === 'production'
+  ? path.join(__dirname, '..', 'data')
+  : path.join(__dirname, '..'));
+const STATE_PATH = path.join(DATA_DIR, 'server-state.json');
 const ENV_PATH = path.join(__dirname, '..', '.env');
 
 // ── Load .env file ───────────────────────────────
@@ -154,8 +158,9 @@ function isBot(login: string): boolean {
 
 function loadServerState(): ServerState {
   try {
-    if (fs.existsSync(STATE_PATH)) {
-      const loaded = JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8')) as ServerState & { weekStartDate?: string };
+    const source = fs.existsSync(STATE_PATH) ? STATE_PATH : LEGACY_STATE_PATH;
+    if (fs.existsSync(source)) {
+      const loaded = JSON.parse(fs.readFileSync(source, 'utf-8')) as ServerState & { weekStartDate?: string };
       // Existing weekly totals are a valid partial count for their month.
       // Keep them as the monthly baseline so the first full sync only adds
       // earlier activity that was not already included in total XP.
@@ -201,6 +206,7 @@ function persistState(): void {
   state.seenIds = [...seenIds];
   state.creditedCommitShas = [...creditedCommitShas];
   try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(STATE_PATH, JSON.stringify(state), 'utf-8');
   } catch (err) {
     console.warn('[server] Failed to persist state:', err);

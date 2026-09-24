@@ -80,6 +80,7 @@ Vite also binds to `0.0.0.0`, so a TV on the same local network can open `http:/
 | `GITARENA_ORG` | ✅ | GitHub organisation slug (e.g. `my-company`) |
 | `GITARENA_REPOS` | — | Comma-separated repo names to watch. Empty = auto-discover all org repos |
 | `PORT` | — | Backend port (default: `3002`) |
+| `GITARENA_DATA_DIR` | — | Directory for persistent server state. Defaults to `data/` in production and the project root in development |
 | `GITARENA_ADMIN_SECRET` | — | If set, the recalculation and repair endpoints require an `X-Admin-Secret` header matching this value |
 | `SERVE_STATIC` | — | Set to `1` to have the backend serve the built frontend (used by Docker) |
 
