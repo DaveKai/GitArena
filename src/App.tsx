@@ -58,22 +58,27 @@ function Standings({ members, stats }: { members: Member[]; stats: Record<string
     if (!rail) return;
     const firstRun = rail.querySelector<HTMLElement>('.roster-sequence');
     const runWidth = () => (firstRun?.getBoundingClientRect().width || 0) + 7;
+    const updateOverflow = () => rail.classList.toggle('is-static', runWidth() <= rail.clientWidth);
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(rail);
+    if (firstRun) observer.observe(firstRun);
+    updateOverflow();
     const wrap = () => {
       const width = runWidth();
-      if (sorted.length > 5 && width && rail.scrollLeft >= width) rail.scrollLeft -= width;
+      if (width > rail.clientWidth && rail.scrollLeft >= width) rail.scrollLeft -= width;
     };
     rail.addEventListener('scroll', wrap, { passive: true });
     const id = setInterval(() => {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || rail.matches(':hover') || rail.matches(':focus-within') || runWidth() <= rail.clientWidth) return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || runWidth() <= rail.clientWidth) return;
       rail.scrollBy({ left: 210, behavior: 'smooth' });
     }, 3200);
-    return () => { clearInterval(id); rail.removeEventListener('scroll', wrap); };
+    return () => { clearInterval(id); rail.removeEventListener('scroll', wrap); observer.disconnect(); };
   }, [sorted.length]);
   const rosterCards = (copy: boolean) => sorted.map((member, i) => <div className="roster-card" key={`${copy ? 'loop-' : ''}${member.login}`}><span>{String(i + 1).padStart(2, '0')}</span><Avatar member={member}/><div><strong>{member.name}</strong><small>{number(stats[member.login]?.monthlyXp || 0)} XP</small></div></div>);
   return <section className="arena-panel standings-panel"><div className="panel-heading"><div><span className="eyebrow">01 / THE COMPETITION</span><h1>THE STANDINGS<span className="title-dot">.</span></h1></div><span className="heading-aside">MONTHLY XP <span className="heading-count">{sorted.length.toString().padStart(2, '0')}</span></span></div>
     <div className="standings-list">{sorted.length === 0 && <div className="empty-state"><ArenaIcon name="users" size={36}/><strong>THE ARENA IS QUIET</strong><span>Activity will put your team on the board.</span></div>}
       {sorted.slice(0, 5).map((member, i) => { const s = stats[member.login]; const xp = s?.monthlyXp || 0; const progress = leadXp ? Math.max(3, xp / leadXp * 100) : 0; return <motion.div layout key={member.login} className={`standing-row ${i === 0 ? 'standing-row--leader' : ''}`} transition={{ layout: { duration: 0.65, type: 'spring', bounce: 0.12 } }}><span className="standing-rank">{String(i + 1).padStart(2, '0')}</span><Avatar member={member} large={i === 0}/><div className="standing-person"><div className="standing-name-line"><strong>{member.name}</strong>{i === 0 && <span className="leader-flag"><ArenaIcon name="trophy" size={13}/> THE LEADER</span>}</div><div className="standing-subline"><span>@{member.login}</span><span className="standing-bar"><span style={{ width: `${progress}%` }}/></span></div></div>{s?.streak ? <div className="standing-streak"><ArenaIcon name="flame" size={16}/>{s.streak}D</div> : null}<AnimatedScore xp={xp}/></motion.div>; })}</div>
-    {sorted.length > 0 && <div className="roster-section"><div className="roster-heading"><span>FULL ROSTER / {sorted.length} BUILDERS</span><div><button onClick={() => rosterRef.current?.scrollBy({ left: -250, behavior: 'smooth' })} aria-label="Scroll roster left">←</button><button onClick={() => rosterRef.current?.scrollBy({ left: 250, behavior: 'smooth' })} aria-label="Scroll roster right">→</button></div></div><div className="roster-rail" ref={rosterRef} tabIndex={0} aria-label="All ranked builders, scroll horizontally"><div className="roster-track"><div className="roster-sequence">{rosterCards(false)}</div>{sorted.length > 5 && <div className="roster-sequence" aria-hidden="true">{rosterCards(true)}</div>}</div></div></div>}
+    {sorted.length > 0 && <div className="roster-section"><div className="roster-heading"><span>FULL ROSTER / {sorted.length} BUILDERS</span><span className="roster-heading-status">ROTATING RANKINGS ↗</span></div><div className="roster-rail" ref={rosterRef} aria-label="All ranked builders"><div className="roster-track"><div className="roster-sequence">{rosterCards(false)}</div><div className="roster-sequence" aria-hidden="true">{rosterCards(true)}</div></div></div></div>}
     <div className="standings-foot"><span>EVERY CONTRIBUTION COUNTS</span><span>RANKINGS UPDATE LIVE ↗</span></div>
   </section>;
 }
@@ -91,17 +96,22 @@ function Activity({ feed, members, now }: { feed: FeedItem[]; members: Member[];
     if (!list) return;
     const firstRun = list.querySelector<HTMLElement>('.activity-sequence');
     const runHeight = () => firstRun?.getBoundingClientRect().height || 0;
+    const updateOverflow = () => list.classList.toggle('is-static', runHeight() <= list.clientHeight);
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(list);
+    if (firstRun) observer.observe(firstRun);
+    updateOverflow();
     list.scrollTop = 0;
-    const wrap = () => { const height = runHeight(); if (recent.length > 3 && height && list.scrollTop >= height) list.scrollTop -= height; };
+    const wrap = () => { const height = runHeight(); if (height > list.clientHeight && list.scrollTop >= height) list.scrollTop -= height; };
     list.addEventListener('scroll', wrap, { passive: true });
     const id = setInterval(() => {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || list.matches(':hover') || list.matches(':focus-within') || runHeight() <= list.clientHeight) return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || runHeight() <= list.clientHeight) return;
       list.scrollBy({ top: firstRun?.querySelector('.activity-row')?.getBoundingClientRect().height || 68, behavior: 'smooth' });
     }, 3600);
-    return () => { clearInterval(id); list.removeEventListener('scroll', wrap); };
+    return () => { clearInterval(id); list.removeEventListener('scroll', wrap); observer.disconnect(); };
   }, [recent.length, recent[0]?.id]);
   const rows = (copy: boolean) => recent.map((item, i) => <motion.div layout key={`${copy ? 'loop-' : ''}${item.id}`} className={`activity-row ${i === 0 ? 'activity-row--first' : ''}`} initial={copy ? false : { opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.35 }}><div className={`event-symbol event-symbol--${item.type}`}><ArenaIcon name={eventIcons[item.type] || 'spark'} size={21}/></div><div className="activity-copy"><div className="activity-line"><strong>{members.find(m => m.login === item.user)?.name || item.user}</strong><span>{item.message}</span></div><div className="activity-detail">{item.detail || item.repo || 'Team activity'}</div></div><div className="activity-meta"><strong>{item.xp > 0 ? `+${item.xp}` : '—'} <span>XP</span></strong><span>{elapsed(item.time, now)}</span></div></motion.div>);
-  return <section className="arena-panel activity-panel"><div className="activity-heading"><div><span className="eyebrow">02 / THE PULSE</span><h2>RECENT ACTIVITY<span className="title-dot">.</span></h2></div><span className="activity-live"><span className="live-indicator"/> LIVE</span></div><div className="activity-list" ref={listRef} tabIndex={0} aria-label="Recent activity, scroll vertically">{recent.length === 0 ? <div className="empty-state"><ArenaIcon name="git" size={34}/><strong>WAITING FOR THE FIRST MOVE</strong><span>New commits, reviews, and wins appear here.</span></div> : <div className="activity-track"><div className="activity-sequence"><AnimatePresence initial={false}>{rows(false)}</AnimatePresence></div>{recent.length > 3 && <div className="activity-sequence" aria-hidden="true">{rows(true)}</div>}</div>}</div></section>;
+  return <section className="arena-panel activity-panel"><div className="activity-heading"><div><span className="eyebrow">02 / THE PULSE</span><h2>RECENT ACTIVITY<span className="title-dot">.</span></h2></div><span className="activity-live"><span className="live-indicator"/> LIVE</span></div><div className="activity-list" ref={listRef} aria-label="Recent activity">{recent.length === 0 ? <div className="empty-state"><ArenaIcon name="git" size={34}/><strong>WAITING FOR THE FIRST MOVE</strong><span>New commits, reviews, and wins appear here.</span></div> : <div className="activity-track"><div className="activity-sequence"><AnimatePresence initial={false}>{rows(false)}</AnimatePresence></div><div className="activity-sequence" aria-hidden="true">{rows(true)}</div></div>}</div></section>;
 }
 
 function Metric({ label, value, icon }: { label: string; value: number; icon: IconName }) { return <div className="feature-metric"><ArenaIcon name={icon} size={24}/><strong>{value >= 100000 ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value) : number(value)}</strong><span>{label}</span></div>; }
@@ -122,8 +132,8 @@ function Feature({ mode, members, stats, feed, shamePRs }: { mode: number; membe
 }
 
 function FeatureStage({ members, stats, feed, shamePRs }: { members: Member[]; stats: Record<string, DevStats>; feed: FeedItem[]; shamePRs: ShamePR[] }) {
-  const mode = useStore(s => s.spotlightMode), setMode = useStore(s => s.setSpotlightMode), reduced = useReducedMotion();
-  return <section className="arena-panel feature-stage"><nav className="feature-nav" aria-label="Feature panels"><span className="eyebrow">03 / SPOTLIGHT</span><div>{featureNames.map((name, i) => <button key={name} onClick={() => setMode(i)} className={mode === i ? 'selected' : ''} aria-label={`Show ${name}`} aria-current={mode === i ? 'true' : undefined}><ArenaIcon name={featureIcons[i]} size={17}/><span>{name}</span><b>{String(i + 1).padStart(2, '0')}</b></button>)}</div></nav><div className="feature-display"><AnimatePresence mode="wait"><motion.div key={mode} className="feature-frame" initial={reduced ? { opacity: 0 } : { opacity: 0, x: 22 }} animate={{ opacity: 1, x: 0 }} exit={reduced ? { opacity: 0 } : { opacity: 0, x: -22 }} transition={{ duration: reduced ? 0.1 : 0.42 }}><Feature mode={mode} members={members} stats={stats} feed={feed} shamePRs={shamePRs}/></motion.div></AnimatePresence><div className="feature-timer"><motion.span key={mode} initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 12, ease: 'linear' }}/></div></div></section>;
+  const mode = useStore(s => s.spotlightMode), reduced = useReducedMotion();
+  return <section className="arena-panel feature-stage"><div className="feature-nav" role="group" aria-label="Spotlight rotation"><span className="eyebrow">03 / SPOTLIGHT</span><div>{featureNames.map((name, i) => <div key={name} className={`feature-option ${mode === i ? 'selected' : ''}`} aria-current={mode === i ? 'true' : undefined}><ArenaIcon name={featureIcons[i]} size={17}/><span>{name}</span><b>{String(i + 1).padStart(2, '0')}</b></div>)}</div></div><div className="feature-display"><AnimatePresence mode="wait"><motion.div key={mode} className="feature-frame" initial={reduced ? { opacity: 0 } : { opacity: 0, x: 22 }} animate={{ opacity: 1, x: 0 }} exit={reduced ? { opacity: 0 } : { opacity: 0, x: -22 }} transition={{ duration: reduced ? 0.1 : 0.42 }}><Feature mode={mode} members={members} stats={stats} feed={feed} shamePRs={shamePRs}/></motion.div></AnimatePresence><div className="feature-timer"><motion.span key={mode} initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 12, ease: 'linear' }}/></div></div></section>;
 }
 
 function Celebration({ overlay, onDone }: { overlay: { type: string; payload: Record<string, unknown> }; onDone: () => void }) {
