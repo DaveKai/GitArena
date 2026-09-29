@@ -111,6 +111,7 @@ interface ServerState {
   commitPrCache?: Record<string, boolean>;
   defaultBranches?: Record<string, string>;
   lastSeason?: SeasonRecap;
+  promotionRescoreMonth?: string;
 }
 
 /** Final standings of the previous month, kept for the TV's season recap. */
@@ -158,12 +159,15 @@ interface DiffCacheEntry {
   login?: string;
   time?: string;
   title?: string;
+  parents?: number;
 }
 
 // ── GitHub config ────────────────────────────────
 const GH_PAT = process.env.GITARENA_PAT || '';
 const GH_ORG = process.env.GITARENA_ORG || '';
 const GH_REPOS = (process.env.GITARENA_REPOS || '').split(',').filter(Boolean);
+// Branches besides each repo's default branch where direct pushes earn code XP.
+const EXTRA_SCORING_BRANCHES = (process.env.GITARENA_SCORING_BRANCHES ?? 'staging').split(',').map(b => b.trim()).filter(Boolean);
 const PORT = parseInt(process.env.PORT || '3002', 10);
 const ADMIN_SECRET = process.env.GITARENA_ADMIN_SECRET || '';
 const BASE = 'https://api.github.com';
@@ -437,6 +441,7 @@ async function getCommitDiff(repo: string, sha: string): Promise<DiffCacheEntry 
     login: (first?.author as Record<string, string> | undefined)?.login || (first?.committer as Record<string, string> | undefined)?.login,
     time: committer?.date || author?.date,
     title: ((commit?.message as string) || '').split('\n')[0],
+    parents: Array.isArray(first?.parents) ? (first!.parents as unknown[]).length : undefined,
   };
   state.commitDiffCache![key] = entry;
   return entry;
@@ -444,6 +449,47 @@ async function getCommitDiff(repo: string, sha: string): Promise<DiffCacheEntry 
 
 function award(kind: ScoreAward['kind'], login: string, amount: number, time: string): ScoreAward {
   return { kind, login, amount, time, month: awardMonth(time) };
+}
+
+/** The default branch plus the configured extra scoring branches (e.g. staging). */
+async function scoringBranches(repo: string): Promise<string[] | null> {
+  const branch = await getDefaultBranch(repo);
+  return branch ? [...new Set([branch, ...EXTRA_SCORING_BRANCHES])] : null;
+}
+
+/**
+ * A PR between two scoring branches (e.g. staging -> main) only promotes
+ * code that already earned XP on its way in, so it scores nothing itself.
+ */
+function isPromotionPr(pr: Record<string, unknown>, branches: string[]): boolean {
+  const base = (pr.base as Record<string, string> | undefined)?.ref || '';
+  const head = (pr.head as Record<string, string> | undefined)?.ref || '';
+  return Boolean(base && head && base !== head && branches.includes(base) && branches.includes(head));
+}
+
+const branchExistsCache = new Map<string, { exists: boolean; at: number }>();
+/** true / false when GitHub answered, undefined when it could not be checked. */
+async function branchExists(repo: string, branch: string): Promise<boolean | undefined> {
+  const key = `${repo}:${branch}`, hit = branchExistsCache.get(key);
+  if (hit && Date.now() - hit.at < 60 * 60_000) return hit.exists;
+  if (Date.now() < ghRateLimitedUntil.core) return undefined;
+  const res = await fetch(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/branches/${encodeURIComponent(branch)}`, { headers: ghHeaders() }).catch(() => null);
+  if (!res || (res.status !== 404 && !res.ok)) return undefined;
+  branchExistsCache.set(key, { exists: res.ok, at: Date.now() });
+  return res.ok;
+}
+
+/** Scoring branches that exist in this repo, or null if that could not be determined. */
+async function existingScoringBranches(repo: string): Promise<string[] | null> {
+  const branches = await scoringBranches(repo);
+  if (!branches) return null;
+  const found: string[] = [];
+  for (const branch of branches) {
+    const exists = branch === branches[0] ? true : await branchExists(repo, branch);
+    if (exists === undefined) return null;
+    if (exists) found.push(branch);
+  }
+  return found;
 }
 
 async function getPrLedgerEntry(repo: string, number: number): Promise<ScoreLedgerEntry | null> {
@@ -458,6 +504,9 @@ async function getPrLedgerEntry(repo: string, number: number): Promise<ScoreLedg
   const active = pr.state === 'open' || merged;
   const merger = (pr.merged_by as Record<string, string> | null)?.login || '';
   if (!author || !headSha || !createdAt || (merged && !merger)) return null;
+  const branches = await scoringBranches(repo);
+  if (!branches) return null;
+  if (isPromotionPr(pr, branches)) return { key: `pr:${repo}:${number}`, repo, title: String(pr.title || 'PR'), awards: {}, lineAwards: {}, added: 0, deleted: 0, fileCount: 0, updatedAt: String(pr.updated_at || createdAt) };
   const diff = await getPrDiff(repo, number, headSha);
   if (!diff) return null;
   const awards: Record<string, ScoreAward> = {};
@@ -501,16 +550,22 @@ async function getPrLedgerEntry(repo: string, number: number): Promise<ScoreLedg
 }
 
 async function getDirectLedgerEntry(repo: string, sha: string): Promise<ScoreLedgerEntry | null | undefined> {
-  const associationKey = `${repo}:${sha}`;
+  // v2: promotion PRs (staging -> main) no longer claim the commits they carry.
+  const associationKey = `${repo}:${sha}:v2`;
   if (state.commitPrCache![associationKey] === undefined) {
+    const branches = await scoringBranches(repo);
+    if (!branches) return undefined;
     const prs = await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits/${sha}/pulls`, 2);
     if (!prs) return undefined;
-    state.commitPrCache![associationKey] = prs.some(pr => pr.state === 'open' || Boolean(pr.merged_at));
+    // Scored through a feature PR, or it is the merge/squash commit a PR created.
+    state.commitPrCache![associationKey] = prs.some(pr => (pr.state === 'open' || Boolean(pr.merged_at)) && (!isPromotionPr(pr, branches) || pr.merge_commit_sha === sha));
   }
   if (state.commitPrCache![associationKey]) return null;
   const diff = await getCommitDiff(repo, sha);
   if (!diff) return undefined;
   if (!diff.login || !diff.time || isBot(diff.login)) return null;
+  // Merge commits (e.g. `git merge staging` pushed to main) carry code already scored on its own commits.
+  if ((diff.parents || 1) > 1) return null;
   const code = diff.codeXp;
   const month = awardMonth(diff.time);
   const awards = code ? { [`code:${diff.login}:${month}`]: award('code', diff.login, code, diff.time) } : {};
@@ -597,6 +652,28 @@ async function reconcileDirectCommit(repo: string, sha: string): Promise<void> {
   finally { pendingScoring.delete(key); }
 }
 
+/**
+ * Once per month: PRs scored before promotion PRs were recognised (e.g. a
+ * staging -> main release this month) drop to zero, since their code already
+ * scored on the way into staging.
+ */
+async function rescorePromotionPrs(): Promise<void> {
+  if (state.scoringVersion !== 2 || state.scoringHash !== scoreConfigHash() || state.promotionRescoreMonth === state.monthStartDate) return;
+  let complete = true, cleared = 0;
+  for (const [key, entry] of Object.entries(state.scoreLedger || {})) {
+    if (!key.startsWith('pr:') || !Object.values(entry.awards).some(item => item.month === state.monthStartDate)) continue;
+    const [, repo, number] = key.split(':');
+    const branches = await scoringBranches(repo);
+    const result = await ghFetch(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/pulls/${number}`);
+    if (!branches || !result.ok || !result.data) { complete = false; continue; }
+    if (!isPromotionPr(result.data as Record<string, unknown>, branches)) continue;
+    replaceLedgerEntry({ ...entry, awards: {}, lineAwards: {}, added: 0, deleted: 0, fileCount: 0 });
+    cleared++;
+  }
+  console.log(`[server] Promotion PR rescore: cleared ${cleared}${complete ? '' : ' (incomplete, will retry)'}`);
+  if (complete) { state.promotionRescoreMonth = state.monthStartDate; persistState(); }
+}
+
 async function collectCurrentMonthScores(): Promise<Record<string, ScoreLedgerEntry>> {
   const from = state.monthStartDate;
   const to = todayStr();
@@ -630,11 +707,15 @@ async function collectCurrentMonthScores(): Promise<Record<string, ScoreLedgerEn
     if (repo && (!GH_REPOS.length || GH_REPOS.includes(repo))) repos.add(repo);
   }
   for (const repo of repos) {
-    const branch = await getDefaultBranch(repo);
-    if (!branch) throw new Error(`Could not identify default branch for ${repo}; scores were not changed`);
-    const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(`${from}T00:00:00Z`)}`;
-    const branchCommits = await ghList(url);
-    if (!branchCommits) throw new Error(`Could not list default-branch commits for ${repo}; scores were not changed`);
+    const branches = await existingScoringBranches(repo);
+    if (!branches) throw new Error(`Could not identify scoring branches for ${repo}; scores were not changed`);
+    const branchCommits: Array<Record<string, unknown>> = [];
+    for (const branch of branches) {
+      const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(`${from}T00:00:00Z`)}`;
+      const listed = await ghList(url);
+      if (!listed) throw new Error(`Could not list ${branch} commits for ${repo}; scores were not changed`);
+      branchCommits.push(...listed);
+    }
     for (const commit of branchCommits) {
       const sha = String(commit.sha || '');
       if (!sha) continue;
@@ -887,9 +968,9 @@ async function comparePushCommits(repo: string, before: string, head: string): P
 }
 
 async function recordPushCommits(repo: string, ref: string, commits: PushCommit[], actor: string, avatarUrl: string, eventTime: string): Promise<void> {
-  const branch = await getDefaultBranch(repo);
-  if (!branch) throw new Error(`Default branch unavailable for ${repo}`);
-  const isDefault = ref === `refs/heads/${branch}`;
+  const branches = await scoringBranches(repo);
+  if (!branches) throw new Error(`Default branch unavailable for ${repo}`);
+  const isDefault = branches.some(branch => ref === `refs/heads/${branch}`);
   const linkedPrs = state.scoringVersion === 2 && !isDefault && commits.length
     ? await ghList(`${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits/${commits[commits.length - 1].sha}/pulls`, 2)
     : null;
@@ -1596,14 +1677,16 @@ async function fullSync(): Promise<void> {
       const reposWithCommits = new Set(commitItems.map(commit => (commit.repository as Record<string, string> | undefined)?.name).filter((repo): repo is string => Boolean(repo)));
       let sweepComplete = true;
       for (const repo of reposWithCommits) {
-        const branch = await getDefaultBranch(repo);
-        if (!branch) { sweepComplete = false; continue; }
-        const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(`${ws}T00:00:00Z`)}`;
-        const branchCommits = await ghList(url);
-        if (!branchCommits) { sweepComplete = false; continue; }
-        for (const commit of branchCommits) {
-          const sha = String(commit.sha || '');
-          if (sha && !state.scoreLedger?.[`direct:${repo}:${sha}`]) await reconcileDirectCommit(repo, sha);
+        const branches = await existingScoringBranches(repo);
+        if (!branches) { sweepComplete = false; continue; }
+        for (const branch of branches) {
+          const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(`${ws}T00:00:00Z`)}`;
+          const branchCommits = await ghList(url);
+          if (!branchCommits) { sweepComplete = false; continue; }
+          for (const commit of branchCommits) {
+            const sha = String(commit.sha || '');
+            if (sha && !state.scoreLedger?.[`direct:${repo}:${sha}`]) await reconcileDirectCommit(repo, sha);
+          }
         }
       }
       if (sweepComplete) lastDirectSweep = Date.now();
@@ -1922,6 +2005,8 @@ app.listen(PORT, '0.0.0.0', () => {
 
   // Initial full sync then start polling
   fullSync().then(() => {
+    rescorePromotionPrs().catch(err => console.warn('[server] Promotion PR rescore failed:', err));
+    setInterval(() => rescorePromotionPrs().catch(() => {}), 60 * 60_000);
     pollEvents();
     setInterval(pollEvents, xpConfig.pollIntervalSeconds * 1000);
     setInterval(fullSync, xpConfig.fullSyncIntervalSeconds * 1000);
