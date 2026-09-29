@@ -36,7 +36,7 @@ export function AnimatedScore({ xp, className = 'standing-score', unit = 'XP' }:
 
 export function UiSwitch({ mode, onChange }: { mode: UiMode; onChange: (mode: UiMode) => void }) {
   return <div className={`ui-switch ui-switch--${mode}`} role="radiogroup" aria-label="Display style">
-    <motion.span className="ui-switch-thumb" layout transition={{ type: 'spring', stiffness: 420, damping: 34 }} />
+    <span className="ui-switch-thumb" aria-hidden="true" />
     {(['broadcast', 'arena'] as const).map(option => <button key={option} role="radio" aria-checked={mode === option} className={mode === option ? 'active' : ''} onClick={() => onChange(option)}>{option.toUpperCase()}</button>)}
   </div>;
 }

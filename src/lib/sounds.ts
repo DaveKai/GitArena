@@ -40,6 +40,10 @@ export function playEventSound(type: string) {
     case 'overtaken': sfxOvertaken(); break;
     case 'achievement': sfxAchievement('rare'); break;
     case 'boss-victory': sfxBossVictory(); break;
+    case 'tier-up': sfxAchievement('legendary'); break;
+    case 'first-blood': sfxFirstBlood(); break;
+    case 'ace': sfxAce(); break;
+    case 'interstitial': sfxSweep(); break;
     default: sfxXp();
   }
 }
@@ -152,4 +156,22 @@ export function sfxBossVictory() {
     playTone(1047, 0.5, 'sine', 0.12);
     playTone(659, 0.5, 'triangle', 0.06);
   }, 650);
+}
+
+/** First blood — low hit then a sharp sting */
+export function sfxFirstBlood() {
+  playTone(110, 0.3, 'sawtooth', 0.12);
+  setTimeout(() => playTone(988, 0.12, 'square', 0.07), 90);
+  setTimeout(() => playTone(1319, 0.35, 'sine', 0.10), 180);
+}
+
+/** Ace — five quick rising hits, then a chord */
+export function sfxAce() {
+  [523, 587, 659, 784, 880].forEach((f, i) => setTimeout(() => playTone(f, 0.1, 'square', 0.06), i * 85));
+  setTimeout(() => { playTone(1047, 0.6, 'sine', 0.14); playTone(1319, 0.6, 'sine', 0.08); playTone(784, 0.6, 'triangle', 0.08); }, 480);
+}
+
+/** Soft sweep for screen takeovers */
+export function sfxSweep() {
+  [330, 440, 587].forEach((f, i) => setTimeout(() => playTone(f, 0.22, 'sine', 0.05), i * 60));
 }

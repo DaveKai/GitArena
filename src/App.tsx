@@ -7,8 +7,9 @@ import { ArenaIcon, type IconName } from './components/ui/ArenaIcon';
 import { getBadgeDef } from './lib/badges';
 import { playEventSound, setSoundEnabled, unlockAudio } from './lib/sounds';
 import type { DevStats, FeedItem, Member, ShamePR } from './types';
-import { AnimatedScore, Avatar, RankTierChip, UiSwitch, tierForRank, elapsed, eventIcons, initials, number, type UiMode } from './components/shared';
+import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, tierForRank, elapsed, eventIcons, initials, number, type UiMode } from './components/shared';
 import { ArenaSelectView } from './components/arena/ArenaSelectView';
+import { KillFeed, MatchPointChip, OnFireChip, QuietScreen, Takeovers, hotLogins, seasonClock, useArenaMoments, useQuiet } from './components/extras';
 
 const featureNames = ['MVP', 'HEAD TO HEAD', 'STREAKS', 'AWARDS', 'BY THE NUMBERS', 'REVIEW QUEUE', 'MOMENTUM', 'TROPHY WALL'];
 const featureIcons: IconName[] = ['trophy', 'bolt', 'flame', 'medal', 'chart', 'review', 'chart', 'star'];
@@ -17,7 +18,7 @@ function Header({ isDemo, memberCount, now, periodStart, soundOn, onSound, onExp
   const period = new Date(`${periodStart}T00:00:00Z`);
   return <header className="arena-header">
     <div className="brand-mark"><ArenaIcon name="arena" size={27} /><span>GIT<span>ARENA</span></span></div><div className="header-rule" />
-    <div className="season-label"><span className="eyebrow">THE BUILD SEASON</span><strong>{period.toLocaleString('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase()}</strong></div><div className="header-spacer" />
+    <div className="season-label"><span className="eyebrow">THE BUILD SEASON</span><strong>{period.toLocaleString('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase()} · ROUND {seasonClock(periodStart, now).round}/{seasonClock(periodStart, now).total}</strong></div><div className="header-spacer" /><MatchPointChip periodStart={periodStart} now={now}/>
     <div className="broadcast-status"><span className="live-indicator" />{isDemo ? 'DEMO BROADCAST' : 'LIVE BROADCAST'}</div>
     <div className="header-team"><ArenaIcon name="users" size={18} /> {memberCount} BUILDERS</div><div className="header-clock" title="Mac system time (UTC)">{date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })} UTC</div>
     <UiSwitch mode={uiMode} onChange={onUiMode}/>
@@ -26,7 +27,7 @@ function Header({ isDemo, memberCount, now, periodStart, soundOn, onSound, onExp
   </header>;
 }
 
-function Standings({ members, stats }: { members: Member[]; stats: Record<string, DevStats> }) {
+function Standings({ members, stats, hot }: { members: Member[]; stats: Record<string, DevStats>; hot: Set<string> }) {
   const sorted = useMemo(() => [...members].sort((a, b) => (stats[b.login]?.monthlyXp || 0) - (stats[a.login]?.monthlyXp || 0) || a.login.localeCompare(b.login)), [members, stats]);
   const rosterRef = useRef<HTMLDivElement>(null);
   const tail = sorted.slice(3);
@@ -64,7 +65,7 @@ function Standings({ members, stats }: { members: Member[]; stats: Record<string
     const s = stats[member.login];
     const xp = s?.monthlyXp || 0;
     const progress = leadXp ? Math.max(3, xp / leadXp * 100) : 0;
-    return <motion.div layout={!copy && rank < 3} key={`${copy ? 'loop-' : ''}${member.login}`} className={`standing-row ${rank === 0 ? 'standing-row--leader' : ''} ${tierForRank(rank) ? `standing-row--${tierForRank(rank)}` : ''}`} transition={{ layout: { duration: 0.65, type: 'spring', bounce: 0.12 } }}><span className="standing-rank">{String(rank + 1).padStart(2, '0')}</span><Avatar member={member} large={rank === 0}/><div className="standing-person"><div className="standing-name-line"><strong>{member.name}</strong><RankTierChip rank={rank}/>{rank === 0 && <span className="leader-flag"><ArenaIcon name="trophy" size={13}/> THE LEADER</span>}</div><div className="standing-subline"><span>@{member.login}</span><span className="standing-bar"><span style={{ width: `${progress}%` }}/></span></div></div>{s?.streak ? <div className="standing-streak"><ArenaIcon name="flame" size={16}/>{s.streak}D</div> : null}<AnimatedScore xp={xp}/></motion.div>;
+    return <motion.div layout={!copy && rank < 3} key={`${copy ? 'loop-' : ''}${member.login}`} className={`standing-row ${rank === 0 ? 'standing-row--leader' : ''} ${tierForRank(rank) ? `standing-row--${tierForRank(rank)}` : ''}`} transition={{ layout: { duration: 0.65, type: 'spring', bounce: 0.12 } }}><span className="standing-rank">{String(rank + 1).padStart(2, '0')}</span><Avatar member={member} large={rank === 0}/><div className="standing-person"><div className="standing-name-line"><strong>{member.name}</strong><RankTierChip rank={rank}/>{hot.has(member.login) && <OnFireChip/>}{rank === 0 && <span className="leader-flag"><ArenaIcon name="trophy" size={13}/> THE LEADER</span>}</div><div className="standing-subline"><span>@{member.login}</span><span className="standing-bar"><span style={{ width: `${progress}%` }}/></span></div></div>{s?.streak ? <div className="standing-streak"><ArenaIcon name="flame" size={16}/>{s.streak}D</div> : null}<AnimatedScore xp={xp}/></motion.div>;
   };
   return <section className="arena-panel standings-panel"><div className="panel-heading"><div><span className="eyebrow">01 / THE COMPETITION</span><h1>THE STANDINGS<span className="title-dot">.</span></h1></div><span className="heading-aside">MONTHLY XP <span className="heading-count">{sorted.length.toString().padStart(2, '0')}</span></span></div>
     <div className="standings-list">{sorted.length === 0 && <div className="empty-state"><ArenaIcon name="users" size={36}/><strong>THE ARENA IS QUIET</strong><span>Activity will put your team on the board.</span></div>}
@@ -131,9 +132,10 @@ function FeatureStage({ members, stats, feed, shamePRs }: { members: Member[]; s
 function Celebration({ overlay, onDone }: { overlay: { type: string; payload: Record<string, unknown> }; onDone: () => void }) {
   useEffect(() => { const id = setTimeout(onDone, overlay.type === 'boss-victory' ? 5500 : 3800); return () => clearTimeout(id); }, [overlay, onDone]);
   const type = overlay.type, login = String(overlay.payload.login || 'THE TEAM');
-  const title = type === 'level-up' ? 'LEVEL UP' : type === 'boss-victory' ? 'MISSION COMPLETE' : type === 'overtaken' ? 'RANK UP' : 'ACHIEVEMENT UNLOCKED';
-  const detail = type === 'level-up' ? `LEVEL ${overlay.payload.level} / ${overlay.payload.title}` : type === 'boss-victory' ? 'THE TEAM HIT EVERY MONTHLY GOAL' : type === 'overtaken' ? `NOW RANKED #${overlay.payload.newRank}` : String(getBadgeDef(String(overlay.payload.badgeId))?.name || 'NEW AWARD').toUpperCase();
-  return <motion.div className="celebration-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="celebration-card" initial={{ scale: 0.88, y: 45 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 1.04, opacity: 0 }} transition={{ type: 'spring', stiffness: 190, damping: 20 }}><ArenaIcon name={type === 'boss-victory' ? 'target' : type === 'achievement' ? 'medal' : 'bolt'} size={60}/><span className="eyebrow">GITARENA / LIVE MOMENT</span><h2>{title}<span className="title-dot">.</span></h2><strong>{type === 'boss-victory' ? 'TEAM VICTORY' : login}</strong><p>{detail}</p><button onClick={onDone}>CONTINUE <ArenaIcon name="arrow" size={17}/></button></motion.div></motion.div>;
+  const tier = type === 'tier-up' ? overlay.payload.tier as 'radiant' | 'immortal' | 'ascendant' | undefined : undefined;
+  const title = type === 'tier-up' ? 'PROMOTED' : type === 'first-blood' ? 'FIRST BLOOD' : type === 'ace' ? 'ACE' : type === 'level-up' ? 'LEVEL UP' : type === 'boss-victory' ? 'MISSION COMPLETE' : type === 'overtaken' ? 'RANK UP' : 'ACHIEVEMENT UNLOCKED';
+  const detail = type === 'tier-up' ? `NOW ${String(tier || '').toUpperCase()}` : type === 'first-blood' ? 'FIRST SCORED PLAY OF THE DAY' : type === 'ace' ? 'FIVE SCORED PLAYS IN 15 MINUTES' : type === 'level-up' ? `LEVEL ${overlay.payload.level} / ${overlay.payload.title}` : type === 'boss-victory' ? 'THE TEAM HIT EVERY MONTHLY GOAL' : type === 'overtaken' ? `NOW RANKED #${overlay.payload.newRank}` : String(getBadgeDef(String(overlay.payload.badgeId))?.name || 'NEW AWARD').toUpperCase();
+  return <motion.div className="celebration-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="celebration-card" initial={{ scale: 0.88, y: 45 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 1.04, opacity: 0 }} transition={{ type: 'spring', stiffness: 190, damping: 20 }}>{tier ? <RankEmblem tier={tier} size={72}/> : <ArenaIcon name={type === 'boss-victory' ? 'target' : type === 'achievement' ? 'medal' : type === 'first-blood' ? 'target' : type === 'ace' ? 'star' : 'bolt'} size={60}/>}<span className="eyebrow">GITARENA / LIVE MOMENT</span><h2>{title}<span className="title-dot">.</span></h2><strong>{type === 'boss-victory' ? 'TEAM VICTORY' : login}</strong><p>{detail}</p><button onClick={onDone}>CONTINUE <ArenaIcon name="arrow" size={17}/></button></motion.div></motion.div>;
 }
 
 function SoundPrompt({ onChoice }: { onChoice: (enabled: boolean) => void }) { return <div className="sound-prompt-backdrop"><div className="sound-prompt"><div className="sound-prompt-mark"><ArenaIcon name="volume" size={32}/></div><span className="eyebrow">BEFORE THE BROADCAST</span><h2>GIVE THE ARENA<br/><em>A VOICE.</em></h2><p>Hear a short cue when the team lands a big win. Choose how this display sounds.</p><div className="sound-prompt-actions"><button className="primary-action" onClick={() => onChoice(true)}><ArenaIcon name="volume" size={19}/> ENABLE SOUND</button><button className="secondary-action" onClick={() => onChoice(false)}>CONTINUE MUTED</button></div></div></div>; }
@@ -149,6 +151,10 @@ export default function App() {
     try { return localStorage.getItem('gitarena-ui') === 'arena' ? 'arena' : 'broadcast'; } catch { return 'broadcast'; }
   });
   const reduced = useReducedMotion();
+  const { lines: killLines, lastLive } = useArenaMoments();
+  const { quiet, until: quietUntil } = useQuiet(now, lastLive);
+  const quietRef = useRef(quiet); quietRef.current = quiet;
+  const hot = useMemo(() => hotLogins(feed, now), [feed, now]);
   const [wipe, setWipe] = useState(0), [wiping, setWiping] = useState(false);
   const changeUi = (mode: UiMode) => { if (mode !== uiMode) { setWipe(n => n + 1); setWiping(true); } setUiMode(mode); try { localStorage.setItem('gitarena-ui', mode); } catch { /* storage unavailable */ } };
   const previousFeedId = useRef<string | null>(null), previousOverlay = useRef<string | null>(null);
@@ -159,16 +165,19 @@ export default function App() {
   useEffect(() => { if (!isDemo) return; const id = setInterval(checkMonthlyReset, 60000); return () => clearInterval(id); }, [isDemo, checkMonthlyReset]);
   useEffect(() => { const id = setInterval(nextSpotlight, 12000); return () => clearInterval(id); }, [nextSpotlight]);
   useEffect(() => { setSoundEnabled(soundChoice === true); }, [soundChoice]);
-  useEffect(() => { const latest = feed[0]; if (!latest) return; if (previousFeedId.current && previousFeedId.current !== latest.id) playEventSound(latest.type); previousFeedId.current = latest.id; }, [feed]);
-  useEffect(() => { if (!overlay) { previousOverlay.current = null; return; } const key = `${overlay.type}-${JSON.stringify(overlay.payload)}`; if (previousOverlay.current !== key) { playEventSound(overlay.type); previousOverlay.current = key; } }, [overlay]);
+  useEffect(() => { const latest = feed[0]; if (!latest) return; if (previousFeedId.current && previousFeedId.current !== latest.id && !quietRef.current) playEventSound(latest.type); previousFeedId.current = latest.id; }, [feed]);
+  useEffect(() => { if (!overlay) { previousOverlay.current = null; return; } const key = `${overlay.type}-${JSON.stringify(overlay.payload)}`; if (previousOverlay.current !== key) { if (!quietRef.current) playEventSound(overlay.type); previousOverlay.current = key; } }, [overlay]);
   const chooseSound = (enabled: boolean) => { if (enabled) unlockAudio(); setSoundEnabled(enabled); setSoundChoice(enabled); try { localStorage.setItem('gitarena-sound', enabled ? 'on' : 'off'); } catch { /* storage unavailable */ } };
   const expand = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.().catch(() => {}); };
   const soundOn = soundChoice === true, toggleSound = () => chooseSound(!soundChoice);
   return <div className={`ui-root ui-root--${uiMode}`}>
       {uiMode === 'arena'
-        ? <motion.div key="arena" className="ui-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0.1 : 0.35, delay: reduced ? 0 : 0.25 }}><ArenaSelectView now={now} soundOn={soundOn} onSound={toggleSound} uiMode={uiMode} onUiMode={changeUi}/></motion.div>
-        : <motion.div key="broadcast" className="ui-view arena-shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0.1 : 0.35, delay: reduced ? 0 : 0.25 }}><Header isDemo={isDemo} memberCount={members.length} now={now} periodStart={periodStart} soundOn={soundOn} onSound={toggleSound} onExpand={expand} uiMode={uiMode} onUiMode={changeUi}/><main className="arena-main"><Standings members={members} stats={stats}/><div className="arena-right"><Mission progress={complete ? 1 : bossProgress[goal.metric] || 0} goal={goal} teamXp={teamXp} complete={complete}/><Activity feed={feed} members={members} now={now}/></div></main><FeatureStage members={members} stats={stats} feed={feed} shamePRs={shamePRs}/><footer className="arena-footer"><span>GITARENA <b>/</b> BUILD TOGETHER. WIN TOGETHER.</span><span>EVERY COMMIT WRITES THE STORY <ArenaIcon name="arrow" size={15}/></span></footer><AnimatePresence>{overlay && <Celebration key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence></motion.div>}
+        ? <motion.div key="arena" className="ui-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0.1 : 0.35, delay: reduced ? 0 : 0.25 }}><ArenaSelectView now={now} hot={hot} soundOn={soundOn} onSound={toggleSound} uiMode={uiMode} onUiMode={changeUi}/></motion.div>
+        : <motion.div key="broadcast" className="ui-view arena-shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0.1 : 0.35, delay: reduced ? 0 : 0.25 }}><Header isDemo={isDemo} memberCount={members.length} now={now} periodStart={periodStart} soundOn={soundOn} onSound={toggleSound} onExpand={expand} uiMode={uiMode} onUiMode={changeUi}/><main className="arena-main"><Standings members={members} stats={stats} hot={hot}/><div className="arena-right"><Mission progress={complete ? 1 : bossProgress[goal.metric] || 0} goal={goal} teamXp={teamXp} complete={complete}/><Activity feed={feed} members={members} now={now}/></div></main><FeatureStage members={members} stats={stats} feed={feed} shamePRs={shamePRs}/><footer className="arena-footer"><span>GITARENA <b>/</b> BUILD TOGETHER. WIN TOGETHER.</span><span>EVERY COMMIT WRITES THE STORY <ArenaIcon name="arrow" size={15}/></span></footer><AnimatePresence>{overlay && <Celebration key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence></motion.div>}
     {!reduced && wiping && <motion.div key={wipe} className="ui-wipe" initial={{ x: '-90vw' }} animate={{ x: '120vw' }} transition={{ duration: 0.9, ease: [0.7, 0, 0.3, 1] }} onAnimationComplete={() => setWiping(false)} aria-hidden="true"/>}
+    <KillFeed lines={killLines} members={members}/>
+    <Takeovers blocked={!!overlay || quiet}/>
+    <AnimatePresence>{quiet && <QuietScreen now={now} until={quietUntil}/>}</AnimatePresence>
     {soundChoice === null && <SoundPrompt onChoice={chooseSound}/>}
   </div>;
 }

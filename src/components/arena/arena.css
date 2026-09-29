@@ -249,8 +249,16 @@
 .as-card--radiant .as-card-rank, .as-card--immortal .as-card-rank, .as-card--ascendant .as-card-rank { color: var(--tier); }
 .as-card--radiant .as-card-xp > span, .as-card--immortal .as-card-xp > span, .as-card--ascendant .as-card-xp > span { color: var(--tier); }
 .as-card--radiant.is-leader { box-shadow: 0 0 0 1px var(--tier), 0 0 50px rgba(var(--tier-rgb),.5); }
-.as-card--radiant .as-card-foot h3 { background: linear-gradient(180deg, #fffbe0, #f5dc72); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.as-card--radiant .as-card-foot h3 { color: #fff; text-shadow: 0 2px 0 #6b4f08, 0 0 22px rgba(245,220,114,.75), 0 4px 18px rgba(0,0,0,.6); }
+.as-card--radiant .as-card-xp strong { color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
 .as-card--radiant .as-card-flag { color: #2a2206; background: #f5dc72; }
 .as-card--radiant.is-leader .as-card-art::after { background: radial-gradient(circle at 1px 1px, rgba(0,0,0,.25) 1px, transparent 1.6px) 0 0 / 5px 5px, linear-gradient(180deg, transparent 25%, rgba(245,220,114,.5) 60%, #8a6a12 97%); }
 .as-card--radiant.is-focused, .as-card--immortal.is-focused, .as-card--ascendant.is-focused { border-color: var(--tier); box-shadow: 0 0 0 1px var(--tier), 0 18px 44px rgba(var(--tier-rgb),.38); }
 .as-card-tier span { text-shadow: 0 1px 2px #000, 0 0 10px rgba(0,0,0,.8); }
+
+/* On fire */
+.as-card.is-onfire .as-card-art::before { content: ''; position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; height: 45%; background: radial-gradient(ellipse 70% 100% at 50% 100%, rgba(255,120,30,.55), transparent 70%); mix-blend-mode: screen; animation: as-fire 1.4s ease-in-out infinite alternate; pointer-events: none; }
+@keyframes as-fire { from { opacity: .55; transform: scaleY(.9); } to { opacity: 1; transform: scaleY(1.08); } }
+.as-card-foot .on-fire { margin-bottom: 8px; }
+.as-mini-fire { position: absolute; top: 10px; left: 12px; display: grid; place-items: center; width: 28px; height: 28px; color: #1c0a00; background: linear-gradient(135deg, #ffb13b, #ff5a1f); border-radius: 50%; box-shadow: 0 0 14px rgba(255,110,40,.6); }
+.as-card--radiant.is-leader { border-color: var(--tier); }

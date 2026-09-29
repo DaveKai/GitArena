@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DevStats, FeedItem, Member, Belts, ShamePR, BossGoal } from '../types';
+import type { DevStats, FeedItem, Member, Belts, ShamePR, BossGoal, SeasonRecap } from '../types';
 import { CONFIG } from '../config';
 import { XP_VALUES, getLevel, updateXpConfig } from '../lib/xp';
 import { saveState, loadState } from '../lib/storage';
@@ -52,6 +52,7 @@ interface AppState {
   dayStartDate: string;
   isDemo: boolean;
   overlayQueue: Array<{ type: string; payload: Record<string, unknown> }>;
+  lastSeason: SeasonRecap | null;
 
   // Actions
   setMembers: (m: Member[]) => void;
@@ -93,6 +94,7 @@ export const useStore = create<AppState>((set, get) => ({
   dayStartDate: today(),
   isDemo: typeof CONFIG.pat === 'string' && CONFIG.pat.trim().length > 0,
   overlayQueue: [],
+  lastSeason: null,
 
   setMembers: (members) => {
     const existing = get().members;
@@ -386,6 +388,7 @@ export const useStore = create<AppState>((set, get) => ({
       belts?: Belts;
       shamePRs?: ShamePR[];
       monthStartDate?: string;
+      lastSeason?: SeasonRecap | null;
       xpConfig?: { xpValues: Record<string, number>; levels: Array<{ level: number; xp: number; title: string }>; bossGoals?: BossGoal[] };
     };
     const update: Partial<AppState> = {};
@@ -398,6 +401,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (d.belts) update.belts = d.belts;
     if (d.shamePRs) update.shamePRs = d.shamePRs;
     if (d.monthStartDate) update.monthStartDate = d.monthStartDate;
+    if (d.lastSeason !== undefined) update.lastSeason = d.lastSeason;
     if (d.xpConfig) {
       updateXpConfig(d.xpConfig);
       if (d.xpConfig.bossGoals) update.bossGoals = d.xpConfig.bossGoals;

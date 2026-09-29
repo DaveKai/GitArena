@@ -110,6 +110,22 @@ interface ServerState {
   prDiffCache?: Record<string, DiffCacheEntry>;
   commitPrCache?: Record<string, boolean>;
   defaultBranches?: Record<string, string>;
+  lastSeason?: SeasonRecap;
+}
+
+/** Final standings of the previous month, kept for the TV's season recap. */
+interface SeasonRecap {
+  month: string;
+  teamXp: number;
+  standings: Array<{ login: string; xp: number; commits: number; merges: number; reviews: number; streak: number }>;
+}
+
+function snapshotSeason(): SeasonRecap {
+  const standings = Object.values(state.stats)
+    .filter(s => s.monthlyXp > 0)
+    .sort((a, b) => b.monthlyXp - a.monthlyXp)
+    .map(s => ({ login: s.login, xp: s.monthlyXp, commits: s.monthlyCommits, merges: s.monthlyPRsMerged, reviews: s.monthlyPRsReviewed, streak: s.longestStreak || s.streak }));
+  return { month: state.monthStartDate, teamXp: standings.reduce((n, s) => n + s.xp, 0), standings };
 }
 
 interface ScoreAward {
@@ -821,6 +837,7 @@ function checkMonthlyReset(): void {
   }
   if (ms !== state.monthStartDate) {
     console.log(`[server] Monthly reset: ${state.monthStartDate} → ${ms}`);
+    state.lastSeason = snapshotSeason();
     for (const login of Object.keys(state.stats)) {
       const s = state.stats[login];
       s.monthlyXp = 0; s.monthlyCommits = 0; s.monthlyPRsOpened = 0;
@@ -1673,6 +1690,7 @@ function getClientState() {
     belts: state.belts,
     shamePRs: state.shamePRs,
     monthStartDate: state.monthStartDate,
+    lastSeason: state.lastSeason || null,
     xpConfig,
   };
 }

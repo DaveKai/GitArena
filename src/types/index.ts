@@ -64,3 +64,9 @@ export interface ShamePR {
   author: string;
   age: number;
 }
+
+export interface SeasonRecap {
+  month: string;
+  teamXp: number;
+  standings: Array<{ login: string; xp: number; commits: number; merges: number; reviews: number; streak: number }>;
+}

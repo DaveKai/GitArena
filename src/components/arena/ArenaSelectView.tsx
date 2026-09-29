@@ -5,6 +5,7 @@ import { ArenaIcon, type IconName } from '../ui/ArenaIcon';
 import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, tierForRank, compact, elapsed, eventIcons, number, rankBy, type UiMode } from '../shared';
 import { getLevel } from '../../lib/xp';
 import { getBadgeDef } from '../../lib/badges';
+import { MatchPointChip, OnFireChip, seasonClock } from '../extras';
 import type { DevStats, FeedItem, Member } from '../../types';
 import './arena.css';
 
@@ -23,12 +24,13 @@ function useTicker(count: number, ms: number) {
   return tick;
 }
 
-function TopBar({ now, isDemo, memberCount, section, soundOn, onSound, uiMode, onUiMode }: { now: number; isDemo: boolean; memberCount: number; section: number; soundOn: boolean; onSound: () => void; uiMode: UiMode; onUiMode: (mode: UiMode) => void }) {
+function TopBar({ now, periodStart, isDemo, memberCount, section, soundOn, onSound, uiMode, onUiMode }: { now: number; periodStart: string; isDemo: boolean; memberCount: number; section: number; soundOn: boolean; onSound: () => void; uiMode: UiMode; onUiMode: (mode: UiMode) => void }) {
   return <header className="as-top">
     <div className="as-brand"><ArenaIcon name="arena" size={30}/><span>GIT<b>ARENA</b></span></div>
     <span className="as-top-rule"/>
     <nav className="as-sections" aria-label="Display sections">{sections.map((s, i) => <span key={s.label} className={i === section ? 'active' : ''}><ArenaIcon name={s.icon} size={18}/>{s.label}{i === section && <motion.i layoutId="as-section-line"/>}</span>)}</nav>
     <div className="as-top-spacer"/>
+    <MatchPointChip periodStart={periodStart} now={now}/>
     <span className="as-status"><i/>{isDemo ? 'DEMO' : 'LIVE'}</span>
     <span className="as-top-meta"><ArenaIcon name="users" size={17}/>{memberCount}</span>
     <span className="as-clock">{new Date(now).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })}<small>UTC</small></span>
@@ -45,7 +47,7 @@ function SeasonCard({ periodStart, now, teamXp, active }: { periodStart: string;
   const r = 30, c = 2 * Math.PI * r, spent = Math.min(1, Math.max(0, (now - start.getTime()) / (end - start.getTime())));
   return <section className={`as-season ${active ? 'is-called' : ''}`}>
     <span className="as-season-bignum">{String(start.getUTCMonth() + 1).padStart(2, '0')}</span>
-    <div className="as-season-copy"><span className="as-kicker">+ SEASON {start.getUTCFullYear()}</span><h2>{start.toLocaleString('en', { month: 'long', timeZone: 'UTC' })}</h2><small>RANKED · {number(teamXp)} TEAM XP</small></div>
+    <div className="as-season-copy"><span className="as-kicker">+ SEASON {start.getUTCFullYear()}</span><h2>{start.toLocaleString('en', { month: 'long', timeZone: 'UTC' })}</h2><small>ROUND {seasonClock(periodStart, now).round}/{total} · {number(teamXp)} TEAM XP</small></div>
     <div className="as-ring" title={`${left} of ${total} days left`}><svg viewBox="0 0 72 72"><circle cx="36" cy="36" r={r}/><motion.circle cx="36" cy="36" r={r} strokeDasharray={c} initial={{ strokeDashoffset: c }} animate={{ strokeDashoffset: c * spent }} transition={{ duration: 1.2, ease: 'easeOut' }}/></svg><strong>{left}</strong><small>DAYS</small></div>
   </section>;
 }
@@ -79,9 +81,9 @@ function Abilities({ s }: { s?: DevStats }) {
   return <div className="as-abilities">{items.map(([icon, value, label]) => <span key={label} title={label}><ArenaIcon name={icon} size={20}/><b>{compact(value)}</b></span>)}</div>;
 }
 
-function AgentCard({ member, s, rank, focused, rose }: { member: Member; s?: DevStats; rank: number; focused: boolean; rose: boolean }) {
+function AgentCard({ member, s, rank, focused, rose, onFire }: { member: Member; s?: DevStats; rank: number; focused: boolean; rose: boolean; onFire: boolean }) {
   const leader = rank === 0;
-  return <motion.article layout className={`as-card ${leader ? 'is-leader' : ''} ${focused ? 'is-focused' : ''} ${tierForRank(rank) ? `as-card--${tierForRank(rank)}` : ''}`} transition={{ layout: { type: 'spring', stiffness: 170, damping: 22 } }}>
+  return <motion.article layout className={`as-card ${leader ? 'is-leader' : ''} ${focused ? 'is-focused' : ''} ${tierForRank(rank) ? `as-card--${tierForRank(rank)}` : ''} ${onFire ? 'is-onfire' : ''}`} transition={{ layout: { type: 'spring', stiffness: 170, damping: 22 } }}>
     <div className="as-card-art">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : <span style={{ background: member.color }}/>}</div>
     <span className="as-card-rank">{String(rank + 1).padStart(2, '0')}</span>
     {tierForRank(rank) && <div className={`as-card-tier as-card-tier--${tierForRank(rank)}`}><RankEmblem tier={tierForRank(rank)!} size={rank === 0 ? 64 : 54}/><span>{tierForRank(rank)}</span></div>}
@@ -89,22 +91,23 @@ function AgentCard({ member, s, rank, focused, rose }: { member: Member; s?: Dev
     <AnimatePresence>{rose && <motion.span className="as-rankup" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }}><ArenaIcon name="arrow" size={14}/> RANK UP</motion.span>}</AnimatePresence>
     <div className="as-card-foot">
       <AnimatePresence>{(leader || focused) && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: 0.3 }}><Abilities s={s}/></motion.div>}</AnimatePresence>
+      {onFire && <OnFireChip size={13}/>}
       <h3>{member.name}</h3>
       <AnimatedScore xp={s?.monthlyXp || 0} className="as-card-xp"/>
     </div>
   </motion.article>;
 }
 
-function MiniCard({ member, s, rank }: { member: Member; s?: DevStats; rank: number }) {
+function MiniCard({ member, s, rank, onFire }: { member: Member; s?: DevStats; rank: number; onFire: boolean }) {
   const locked = !s?.monthlyXp;
   return <motion.article className={`as-mini ${locked ? 'is-locked' : ''}`} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -18 }} transition={{ duration: 0.35 }}>
     <div className="as-mini-art">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : null}</div>
     {locked && <span className="as-mini-lock"><ArenaIcon name="lock" size={17}/></span>}
-    <div className="as-mini-copy"><small>{locked ? 'Locked' : `#${rank + 1} · ${number(s?.monthlyXp || 0)} XP`}</small><strong>{member.name}</strong></div>
+    {onFire && <span className="as-mini-fire"><ArenaIcon name="flame" size={16}/></span>}<div className="as-mini-copy"><small>{locked ? 'Locked' : `#${rank + 1} · ${number(s?.monthlyXp || 0)} XP`}</small><strong>{member.name}</strong></div>
   </motion.article>;
 }
 
-function AgentCards({ ranked, stats, active }: { ranked: Member[]; stats: Record<string, DevStats>; active: boolean }) {
+function AgentCards({ ranked, stats, active, hot }: { ranked: Member[]; stats: Record<string, DevStats>; active: boolean; hot: Set<string> }) {
   const top = ranked.slice(0, 5), rest = ranked.slice(5);
   const focus = useTicker(top.length, 3800);
   const pages = Math.ceil(rest.length / 5);
@@ -125,10 +128,10 @@ function AgentCards({ ranked, stats, active }: { ranked: Member[]; stats: Record
   const shown = rest.slice(page * 5, page * 5 + 5);
   return <section className={`as-select ${active ? 'is-called' : ''}`}>
     <div className="as-select-head"><h1>The Standings</h1><span>MONTHLY XP · TOP 5 LOCKED</span></div>
-    <div className="as-cards">{top.length === 0 ? <div className="as-empty">THE ARENA IS QUIET</div> : top.map((m, i) => <AgentCard key={m.login} member={m} s={stats[m.login]} rank={i} focused={i !== 0 && i === focus} rose={!!risen[m.login]}/>)}</div>
+    <div className="as-cards">{top.length === 0 ? <div className="as-empty">THE ARENA IS QUIET</div> : top.map((m, i) => <AgentCard key={m.login} member={m} s={stats[m.login]} rank={i} focused={i !== 0 && i === focus} rose={!!risen[m.login]} onFire={hot.has(m.login)}/>)}</div>
     {rest.length > 0 && <div className="as-bench">
       <div className="as-bench-label"><span>THE BENCH</span><small>{pages > 1 ? `${page + 1} / ${pages}` : `${rest.length}`}</small></div>
-      <div className="as-bench-cards"><AnimatePresence mode="wait" initial={false}><motion.div key={page} className="as-bench-page">{shown.map((m, i) => <MiniCard key={m.login} member={m} s={stats[m.login]} rank={5 + page * 5 + i}/>)}</motion.div></AnimatePresence></div>
+      <div className="as-bench-cards"><AnimatePresence mode="wait" initial={false}><motion.div key={page} className="as-bench-page">{shown.map((m, i) => <MiniCard key={m.login} member={m} s={stats[m.login]} rank={5 + page * 5 + i} onFire={hot.has(m.login)}/>)}</motion.div></AnimatePresence></div>
     </div>}
   </section>;
 }
@@ -188,16 +191,17 @@ function PlayerCard({ ranked, stats, active }: { ranked: Member[]; stats: Record
 function ArenaMoment({ overlay, onDone }: { overlay: { type: string; payload: Record<string, unknown> }; onDone: () => void }) {
   useEffect(() => { const id = setTimeout(onDone, overlay.type === 'boss-victory' ? 5500 : 3800); return () => clearTimeout(id); }, [overlay, onDone]);
   const type = overlay.type, login = String(overlay.payload.login || 'THE TEAM');
-  const title = type === 'level-up' ? 'LEVEL UP' : type === 'boss-victory' ? 'LOCKED IN' : type === 'overtaken' ? 'RANK UP' : 'UNLOCKED';
-  const detail = type === 'level-up' ? `LEVEL ${overlay.payload.level} · ${String(overlay.payload.title || '').toUpperCase()}` : type === 'boss-victory' ? 'EVERY MONTHLY GOAL CLEARED' : type === 'overtaken' ? `NOW RANKED #${overlay.payload.newRank}` : String(getBadgeDef(String(overlay.payload.badgeId))?.name || 'NEW AWARD').toUpperCase();
-  return <motion.div className="as-moment" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+  const tier = type === 'tier-up' ? overlay.payload.tier as 'radiant' | 'immortal' | 'ascendant' | undefined : undefined;
+  const title = tier ? tier.toUpperCase() : type === 'first-blood' ? 'FIRST BLOOD' : type === 'ace' ? 'ACE' : type === 'level-up' ? 'LEVEL UP' : type === 'boss-victory' ? 'LOCKED IN' : type === 'overtaken' ? 'RANK UP' : 'UNLOCKED';
+  const detail = tier ? 'PROMOTED · TOP 3 THIS MONTH' : type === 'first-blood' ? 'FIRST SCORED PLAY OF THE DAY' : type === 'ace' ? 'FIVE SCORED PLAYS IN 15 MINUTES' : type === 'level-up' ? `LEVEL ${overlay.payload.level} · ${String(overlay.payload.title || '').toUpperCase()}` : type === 'boss-victory' ? 'EVERY MONTHLY GOAL CLEARED' : type === 'overtaken' ? `NOW RANKED #${overlay.payload.newRank}` : String(getBadgeDef(String(overlay.payload.badgeId))?.name || 'NEW AWARD').toUpperCase();
+  return <motion.div className={`as-moment as-moment--${tier || type}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
     <motion.div className="as-moment-band" initial={{ x: '-110%', skewX: -12 }} animate={{ x: 0, skewX: -12 }} exit={{ x: '110%', skewX: -12 }} transition={{ type: 'spring', stiffness: 120, damping: 20 }}>
-      <div className="as-moment-inner"><span>{type === 'boss-victory' ? 'TEAM VICTORY' : login}</span><h2>{title}</h2><small>{detail}</small></div>
+      <div className="as-moment-inner">{tier && <div className="as-moment-emblem"><RankEmblem tier={tier} size={110}/></div>}<span>{type === 'boss-victory' ? 'TEAM VICTORY' : login}</span><h2>{title}</h2><small>{detail}</small></div>
     </motion.div>
   </motion.div>;
 }
 
-export function ArenaSelectView({ now, soundOn, onSound, uiMode, onUiMode }: { now: number; soundOn: boolean; onSound: () => void; uiMode: UiMode; onUiMode: (mode: UiMode) => void }) {
+export function ArenaSelectView({ now, hot, soundOn, onSound, uiMode, onUiMode }: { now: number; hot: Set<string>; soundOn: boolean; onSound: () => void; uiMode: UiMode; onUiMode: (mode: UiMode) => void }) {
   const members = useStore(s => s.members), stats = useStore(s => s.stats), feed = useStore(s => s.feed), bossProgress = useStore(s => s.bossProgress), bossIndex = useStore(s => s.bossIndex), bossGoals = useStore(s => s.bossGoals), isDemo = useStore(s => s.isDemo), periodStart = useStore(s => s.monthStartDate), overlay = useStore(s => s.overlayQueue[0]), popOverlay = useStore(s => s.popOverlay);
   const ranked = useMemo(() => rankBy(members, stats), [members, stats]);
   const section = useTicker(sections.length, 6000);
@@ -206,9 +210,9 @@ export function ArenaSelectView({ now, soundOn, onSound, uiMode, onUiMode }: { n
   const teamXp = Object.values(stats).reduce((n, s) => n + s.monthlyXp, 0);
   return <div className="theme-arena">
     <div className="as-slab" aria-hidden="true"/>
-    <TopBar now={now} isDemo={isDemo} memberCount={members.length} section={section} soundOn={soundOn} onSound={onSound} uiMode={uiMode} onUiMode={onUiMode}/>
+    <TopBar now={now} periodStart={periodStart} isDemo={isDemo} memberCount={members.length} section={section} soundOn={soundOn} onSound={onSound} uiMode={uiMode} onUiMode={onUiMode}/>
     <aside className="as-rail"><SeasonCard periodStart={periodStart} now={now} teamXp={teamXp} active={section === 1}/><PartyFeed feed={feed} members={members} now={now} active={section === 1}/></aside>
-    <main className="as-main"><AgentCards ranked={ranked} stats={stats} active={section === 0}/><LockInBar goal={goal} progress={complete ? 1 : bossProgress[goal.metric] || 0} complete={complete} goals={bossGoals.length} index={bossIndex}/></main>
+    <main className="as-main"><AgentCards ranked={ranked} stats={stats} active={section === 0} hot={hot}/><LockInBar goal={goal} progress={complete ? 1 : bossProgress[goal.metric] || 0} complete={complete} goals={bossGoals.length} index={bossIndex}/></main>
     <PlayerCard ranked={ranked} stats={stats} active={section === 3}/>
     <TeamMeta members={members} stats={stats} active={section === 2}/>
     <AnimatePresence>{overlay && <ArenaMoment key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence>
