@@ -219,6 +219,15 @@ button:focus-visible { outline: 2px solid #dcfa6b; outline-offset: 3px; }
 .ui-root--arena .sound-prompt-actions button { border-color: #6c5cf0; }
 .ui-root--arena .primary-action { color: #fff; background: #6c5cf0; }
 .ui-root--arena .secondary-action { color: #e6e3ff; background: #2a2a48; }
+/* Top-3 tier chip (shared) */
+.rank-tier { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 4px; border: 1px solid currentColor; font: 700 11px/1 'Geist Mono Variable', monospace; letter-spacing: .12em; white-space: nowrap; }
+.rank-tier--radiant { color: #ffd24a; background: rgba(255,210,74,.1); }
+.rank-tier--immortal { color: #ff6480; background: rgba(232,38,78,.12); }
+.rank-tier--ascendant { color: #45dd8e; background: rgba(47,213,127,.1); }
+/* Broadcast: tier colours on the top-3 rank numbers */
+.standing-row.standing-row--radiant .standing-rank { color: #f5dc72; }
+.standing-row.standing-row--immortal .standing-rank { color: #ff6480; }
+.standing-row.standing-row--ascendant .standing-rank { color: #45dd8e; }
 /* Display style switch (shared by both views) */
 .ui-root { --acid: #dcfa6b; position: relative; background: #080e10; min-height: 100vh; overflow: hidden; }
 .ui-switch { position: relative; flex: none; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); }

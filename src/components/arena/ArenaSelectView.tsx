@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useStore } from '../../store/useStore';
 import { ArenaIcon, type IconName } from '../ui/ArenaIcon';
-import { AnimatedScore, Avatar, UiSwitch, compact, elapsed, eventIcons, number, rankBy, type UiMode } from '../shared';
+import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, tierForRank, compact, elapsed, eventIcons, number, rankBy, type UiMode } from '../shared';
 import { getLevel } from '../../lib/xp';
 import { getBadgeDef } from '../../lib/badges';
 import type { DevStats, FeedItem, Member } from '../../types';
@@ -65,11 +65,11 @@ function PartyFeed({ feed, members, now, active }: { feed: FeedItem[]; members: 
     <div className="as-panel-head"><span><ArenaIcon name="bolt" size={16}/> THE PULSE</span><small><i/> LIVE</small></div>
     <div className="as-party-list">
       {rows.length === 0 && <div className="as-empty">WAITING FOR THE FIRST MOVE</div>}
-      <AnimatePresence initial={false} mode="popLayout">{rows.map(item => { const member = members.find(m => m.login === item.user); return <motion.div layout key={item.id} className={`as-party-row ${item.id === recent[0]?.id ? 'is-latest' : ''}`} initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={{ duration: 0.4 }}>
+      {rows.map(item => { const member = members.find(m => m.login === item.user); return <motion.div layout key={item.id} className={`as-party-row ${item.id === recent[0]?.id ? 'is-latest' : ''}`} initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
         <div className="as-hex"><Avatar member={member}/><span className="as-hex-badge"><ArenaIcon name={eventIcons[item.type] || 'spark'} size={13}/></span></div>
         <div className="as-party-copy"><strong>{member?.name || item.user}</strong><small>{feedVerb(item)} <b>·</b> {item.repo || item.detail}</small></div>
         <div className="as-party-meta"><strong>{item.type === 'branch-push' ? 'PR' : item.xp > 0 ? `+${item.xp}` : '—'}</strong><small>{elapsed(item.time, now)}</small></div>
-      </motion.div>; })}</AnimatePresence>
+      </motion.div>; })}
     </div>
   </section>;
 }
@@ -81,9 +81,10 @@ function Abilities({ s }: { s?: DevStats }) {
 
 function AgentCard({ member, s, rank, focused, rose }: { member: Member; s?: DevStats; rank: number; focused: boolean; rose: boolean }) {
   const leader = rank === 0;
-  return <motion.article layout className={`as-card ${leader ? 'is-leader' : ''} ${focused ? 'is-focused' : ''}`} transition={{ layout: { type: 'spring', stiffness: 170, damping: 22 } }}>
+  return <motion.article layout className={`as-card ${leader ? 'is-leader' : ''} ${focused ? 'is-focused' : ''} ${tierForRank(rank) ? `as-card--${tierForRank(rank)}` : ''}`} transition={{ layout: { type: 'spring', stiffness: 170, damping: 22 } }}>
     <div className="as-card-art">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : <span style={{ background: member.color }}/>}</div>
     <span className="as-card-rank">{String(rank + 1).padStart(2, '0')}</span>
+    {tierForRank(rank) && <div className={`as-card-tier as-card-tier--${tierForRank(rank)}`}><RankEmblem tier={tierForRank(rank)!} size={rank === 0 ? 64 : 54}/><span>{tierForRank(rank)}</span></div>}
     {leader && <span className="as-card-flag"><ArenaIcon name="trophy" size={15}/> LOCKED IN</span>}
     <AnimatePresence>{rose && <motion.span className="as-rankup" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }}><ArenaIcon name="arrow" size={14}/> RANK UP</motion.span>}</AnimatePresence>
     <div className="as-card-foot">
@@ -169,12 +170,13 @@ function PlayerCard({ ranked, stats, active }: { ranked: Member[]; stats: Record
         <small className="as-collectible-lvl">LVL {level.level} · {level.title.toUpperCase()}</small>
         <div className="as-collectible-art"><Avatar member={member}/></div>
         <small className="as-collectible-season">SEASON {new Date().getUTCFullYear()} · #{index + 1}</small>
+        {tierForRank(index) && <span className="as-collectible-tier"><RankEmblem tier={tierForRank(index)!} size={34}/></span>}
         <strong>{member.name}</strong>
         <div className="as-collectible-icons"><ArenaIcon name="git" size={16}/><span className="as-barcode"/><ArenaIcon name={badge?.rarity === 'legendary' ? 'star' : 'shield'} size={16}/></div>
       </motion.div></AnimatePresence>
     </div>
     <div className="as-summary">
-      <span className="as-kicker"><ArenaIcon name="target" size={16}/> PLAYER CHECKPOINT</span>
+      <span className="as-kicker"><ArenaIcon name="target" size={16}/> PLAYER CHECKPOINT <RankTierChip rank={index} size={18}/></span>
       <h2>Summary</h2>
       <AnimatePresence mode="wait"><motion.div key={member.login} className="as-summary-grid" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3 }}>
         {stat('bolt', 'XP this month', number(s?.monthlyXp || 0))}{stat('git', 'Commits', number(s?.monthlyCommits || 0))}{stat('merge', 'PRs merged', number(s?.monthlyPRsMerged || 0))}{stat('review', 'Reviews', number(s?.monthlyPRsReviewed || 0))}{stat('flame', 'Streak', `${s?.streak || 0} days`)}{stat('medal', 'Latest badge', badge?.name || 'None yet')}

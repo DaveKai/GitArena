@@ -102,7 +102,7 @@
 .as-card-rank { position: absolute; left: 20px; top: 16px; font: 800 44px/1 var(--as-display); color: rgba(255,255,255,.85); text-shadow: 0 2px 12px rgba(0,0,0,.6); }
 .is-leader .as-card-rank { color: #fff; }
 .as-card-flag { position: absolute; right: 16px; top: 18px; display: flex; gap: 6px; align-items: center; padding: 6px 9px; color: #fff; background: var(--as-accent); font: 700 11px/1 var(--as-mono); letter-spacing: .14em; }
-.as-rankup { position: absolute; left: 20px; top: 66px; display: flex; gap: 5px; align-items: center; padding: 5px 8px; color: #0f1020; background: #7cf2b0; font: 800 11px/1 var(--as-mono); letter-spacing: .12em; }
+.as-rankup { position: absolute; right: 16px; top: 58px; display: flex; gap: 5px; align-items: center; padding: 5px 8px; color: #0f1020; background: #7cf2b0; font: 800 11px/1 var(--as-mono); letter-spacing: .12em; }
 .as-rankup svg { transform: rotate(-90deg); }
 .as-card-foot { position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 0 12px 16px; text-align: center; }
 .as-card-foot h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 46px/.95 var(--as-display); text-transform: uppercase; letter-spacing: .005em; text-shadow: 0 3px 16px rgba(0,0,0,.5); }
@@ -229,3 +229,28 @@
   .as-main { grid-template-rows: auto auto; } .as-rail { grid-template-rows: 150px 440px; }
   .as-player { height: 280px; } .as-meta-grid { grid-template-columns: 1fr; } .as-meta { grid-template-columns: 1fr; padding: 16px; background: var(--as-accent); } .as-slab { display: none; }
 }
+
+/* Top-3 tier emblems */
+.as-card-tier { position: absolute; left: 16px; top: 66px; display: grid; justify-items: center; gap: 3px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.55)); }
+.as-card-tier span { font: 800 15px/1 var(--as-display); letter-spacing: .12em; text-transform: uppercase; }
+.as-card-tier--radiant span { color: #ffe27a; } .as-card-tier--immortal span { color: #ff7a90; } .as-card-tier--ascendant span { color: #7cf2b0; }
+.as-card-tier--radiant .rank-emblem { animation: as-radiant 3.2s ease-in-out infinite; }
+@keyframes as-radiant { 50% { filter: drop-shadow(0 0 12px rgba(255,210,74,.85)); transform: scale(1.06); } }
+.as-collectible-tier { position: absolute; right: 8px; bottom: 44px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
+.as-kicker .rank-tier { margin-left: 8px; }
+@media (max-height: 950px) and (min-width: 1051px) { .as-card-tier { top: 52px; } .as-card-tier .rank-emblem { width: 42px; height: 42px; } .as-card-tier span { font-size: 12px; } }
+
+/* Signature tier colours on the top-3 cards */
+.as-card--radiant { --tier: #f5dc72; --tier-rgb: 245,220,114; }
+.as-card--immortal { --tier: #e8264e; --tier-rgb: 232,38,78; }
+.as-card--ascendant { --tier: #2fd57f; --tier-rgb: 47,213,127; }
+.as-card--radiant, .as-card--immortal, .as-card--ascendant { border-color: var(--tier); box-shadow: 0 0 0 1px rgba(var(--tier-rgb),.5), 0 0 34px rgba(var(--tier-rgb),.32); }
+.as-card--radiant .as-card-art::after, .as-card--immortal .as-card-art::after, .as-card--ascendant .as-card-art::after { background: radial-gradient(circle at 1px 1px, rgba(0,0,0,.28) 1px, transparent 1.6px) 0 0 / 5px 5px, linear-gradient(180deg, transparent 28%, rgba(var(--tier-rgb),.38) 62%, #141522 96%); }
+.as-card--radiant .as-card-rank, .as-card--immortal .as-card-rank, .as-card--ascendant .as-card-rank { color: var(--tier); }
+.as-card--radiant .as-card-xp > span, .as-card--immortal .as-card-xp > span, .as-card--ascendant .as-card-xp > span { color: var(--tier); }
+.as-card--radiant.is-leader { box-shadow: 0 0 0 1px var(--tier), 0 0 50px rgba(var(--tier-rgb),.5); }
+.as-card--radiant .as-card-foot h3 { background: linear-gradient(180deg, #fffbe0, #f5dc72); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.as-card--radiant .as-card-flag { color: #2a2206; background: #f5dc72; }
+.as-card--radiant.is-leader .as-card-art::after { background: radial-gradient(circle at 1px 1px, rgba(0,0,0,.25) 1px, transparent 1.6px) 0 0 / 5px 5px, linear-gradient(180deg, transparent 25%, rgba(245,220,114,.5) 60%, #8a6a12 97%); }
+.as-card--radiant.is-focused, .as-card--immortal.is-focused, .as-card--ascendant.is-focused { border-color: var(--tier); box-shadow: 0 0 0 1px var(--tier), 0 18px 44px rgba(var(--tier-rgb),.38); }
+.as-card-tier span { text-shadow: 0 1px 2px #000, 0 0 10px rgba(0,0,0,.8); }

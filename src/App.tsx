@@ -7,7 +7,7 @@ import { ArenaIcon, type IconName } from './components/ui/ArenaIcon';
 import { getBadgeDef } from './lib/badges';
 import { playEventSound, setSoundEnabled, unlockAudio } from './lib/sounds';
 import type { DevStats, FeedItem, Member, ShamePR } from './types';
-import { AnimatedScore, Avatar, UiSwitch, elapsed, eventIcons, initials, number, type UiMode } from './components/shared';
+import { AnimatedScore, Avatar, RankTierChip, UiSwitch, tierForRank, elapsed, eventIcons, initials, number, type UiMode } from './components/shared';
 import { ArenaSelectView } from './components/arena/ArenaSelectView';
 
 const featureNames = ['MVP', 'HEAD TO HEAD', 'STREAKS', 'AWARDS', 'BY THE NUMBERS', 'REVIEW QUEUE', 'MOMENTUM', 'TROPHY WALL'];
@@ -64,7 +64,7 @@ function Standings({ members, stats }: { members: Member[]; stats: Record<string
     const s = stats[member.login];
     const xp = s?.monthlyXp || 0;
     const progress = leadXp ? Math.max(3, xp / leadXp * 100) : 0;
-    return <motion.div layout={!copy && rank < 3} key={`${copy ? 'loop-' : ''}${member.login}`} className={`standing-row ${rank === 0 ? 'standing-row--leader' : ''}`} transition={{ layout: { duration: 0.65, type: 'spring', bounce: 0.12 } }}><span className="standing-rank">{String(rank + 1).padStart(2, '0')}</span><Avatar member={member} large={rank === 0}/><div className="standing-person"><div className="standing-name-line"><strong>{member.name}</strong>{rank === 0 && <span className="leader-flag"><ArenaIcon name="trophy" size={13}/> THE LEADER</span>}</div><div className="standing-subline"><span>@{member.login}</span><span className="standing-bar"><span style={{ width: `${progress}%` }}/></span></div></div>{s?.streak ? <div className="standing-streak"><ArenaIcon name="flame" size={16}/>{s.streak}D</div> : null}<AnimatedScore xp={xp}/></motion.div>;
+    return <motion.div layout={!copy && rank < 3} key={`${copy ? 'loop-' : ''}${member.login}`} className={`standing-row ${rank === 0 ? 'standing-row--leader' : ''} ${tierForRank(rank) ? `standing-row--${tierForRank(rank)}` : ''}`} transition={{ layout: { duration: 0.65, type: 'spring', bounce: 0.12 } }}><span className="standing-rank">{String(rank + 1).padStart(2, '0')}</span><Avatar member={member} large={rank === 0}/><div className="standing-person"><div className="standing-name-line"><strong>{member.name}</strong><RankTierChip rank={rank}/>{rank === 0 && <span className="leader-flag"><ArenaIcon name="trophy" size={13}/> THE LEADER</span>}</div><div className="standing-subline"><span>@{member.login}</span><span className="standing-bar"><span style={{ width: `${progress}%` }}/></span></div></div>{s?.streak ? <div className="standing-streak"><ArenaIcon name="flame" size={16}/>{s.streak}D</div> : null}<AnimatedScore xp={xp}/></motion.div>;
   };
   return <section className="arena-panel standings-panel"><div className="panel-heading"><div><span className="eyebrow">01 / THE COMPETITION</span><h1>THE STANDINGS<span className="title-dot">.</span></h1></div><span className="heading-aside">MONTHLY XP <span className="heading-count">{sorted.length.toString().padStart(2, '0')}</span></span></div>
     <div className="standings-list">{sorted.length === 0 && <div className="empty-state"><ArenaIcon name="users" size={36}/><strong>THE ARENA IS QUIET</strong><span>Activity will put your team on the board.</span></div>}
