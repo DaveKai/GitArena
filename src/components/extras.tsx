@@ -177,7 +177,7 @@ export function Takeovers({ blocked }: { blocked: boolean }) {
       for (let n = 0; n < order.length; n++) {
         const kind = forced || order[(cursor.current + n) % order.length];
         const next = buildTakeover(kind, s, !!forced);
-        if (next) { cursor.current = (order.indexOf(kind) + 1) % order.length; setShow(next); playEventSound('interstitial'); return; }
+        if (next) { cursor.current = (order.indexOf(kind) + 1) % order.length; setShow(next); playEventSound(kind === 'radar' ? 'spike' : 'interstitial'); return; }
         if (forced) return;
       }
     };

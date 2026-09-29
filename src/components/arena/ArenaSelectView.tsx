@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useStore } from '../../store/useStore';
 import { ArenaIcon, type IconName } from '../ui/ArenaIcon';
-import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, tierForRank, compact, elapsed, eventIcons, number, rankBy, type UiMode } from '../shared';
+import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, isTopTier, tierForRank, compact, elapsed, eventIcons, number, rankBy, type UiMode } from '../shared';
 import { getLevel } from '../../lib/xp';
 import { getBadgeDef } from '../../lib/badges';
 import { MatchPointChip, seasonClock } from '../extras';
@@ -82,19 +82,19 @@ function Abilities({ s }: { s?: DevStats }) {
 }
 
 function AgentCard({ member, s, rank, focused, rose, onFire }: { member: Member; s?: DevStats; rank: number; focused: boolean; rose: boolean; onFire: boolean }) {
-  const leader = rank === 0, tier = tierForRank(rank), level = getLevel(s?.totalXp || 0);
-  return <motion.article layout className={`as-card ${leader ? 'is-leader' : ''} ${focused ? 'is-focused' : ''} ${tierForRank(rank) ? `as-card--${tierForRank(rank)}` : ''} ${onFire ? 'is-onfire' : ''}`} transition={{ layout: { type: 'spring', stiffness: 170, damping: 22 } }}>
+  const leader = rank === 0, tier = tierForRank(rank, s?.monthlyXp || 0), level = getLevel(s?.totalXp || 0);
+  return <motion.article layout className={`as-card ${leader ? 'is-leader' : ''} ${focused ? 'is-focused' : ''} ${tier ? `as-card--${tier}` : 'as-card--unranked'} ${isTopTier(tier) ? 'as-card--top' : ''} ${onFire ? 'is-onfire' : ''}`} transition={{ layout: { type: 'spring', stiffness: 170, damping: 22 } }}>
     <div className="as-card-art">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : <span style={{ background: member.color }}/>}</div>
     <header className="as-card-top">
       <span className="as-card-rank">{String(rank + 1).padStart(2, '0')}{onFire && <span className="as-card-fire" title="On fire: 3+ plays this hour"><ArenaIcon name="flame" size={16}/></span>}</span>
-      {tier && <RankEmblem tier={tier} size={leader ? 62 : 52}/>}
+      {tier && <RankEmblem tier={tier} size={leader ? 62 : isTopTier(tier) ? 52 : 44}/>}
     </header>
     <AnimatePresence>{rose && <motion.span className="as-rankup" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }}><ArenaIcon name="arrow" size={14}/> RANK UP</motion.span>}</AnimatePresence>
     <div className="as-plate">
       <div className="as-plate-line">
-        <span className="as-plate-tag">{tier || `LVL ${level.level}`}</span>
+        <span className="as-plate-tag">{tier || 'unranked'}</span>
         <i/>
-        <span>{leader ? 'LOCKED IN' : tier ? `LVL ${level.level}` : level.title}</span>
+        <span title="Level comes from lifetime XP">{leader ? 'LOCKED IN' : `LVL ${level.level}`}</span>
       </div>
       <h3>{member.name}</h3>
       <AnimatedScore xp={s?.monthlyXp || 0} className="as-card-xp"/>
@@ -108,7 +108,8 @@ function MiniCard({ member, s, rank, onFire }: { member: Member; s?: DevStats; r
   return <motion.article className={`as-mini ${locked ? 'is-locked' : ''}`} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -18 }} transition={{ duration: 0.35 }}>
     <div className="as-mini-art">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : null}</div>
     {locked && <span className="as-mini-lock"><ArenaIcon name="lock" size={17}/></span>}
-    {onFire && <span className="as-mini-fire"><ArenaIcon name="flame" size={16}/></span>}<div className="as-mini-copy"><small>{locked ? 'Locked' : `#${rank + 1} · ${number(s?.monthlyXp || 0)} XP`}</small><strong>{member.name}</strong></div>
+    {!locked && tierForRank(rank, s?.monthlyXp || 0) && <span className="as-mini-tier"><RankEmblem tier={tierForRank(rank, s?.monthlyXp || 0)!} size={30}/></span>}
+    {onFire && <span className="as-mini-fire"><ArenaIcon name="flame" size={16}/></span>}<div className="as-mini-copy"><small>{locked ? 'Unranked' : `#${rank + 1} · ${tierForRank(rank, s?.monthlyXp || 0)} · ${number(s?.monthlyXp || 0)} XP`}</small><strong>{member.name}</strong></div>
   </motion.article>;
 }
 
@@ -175,16 +176,16 @@ function PlayerCard({ ranked, stats, active }: { ranked: Member[]; stats: Record
       <div className="as-card-back"><div className="as-card-back-mark"><ArenaIcon name="arena" size={34}/></div></div>
       <AnimatePresence mode="wait"><motion.div key={member.login} className="as-collectible" initial={reduced ? { opacity: 0 } : { rotateY: -90, opacity: 0 }} animate={{ rotateY: 0, opacity: 1 }} exit={reduced ? { opacity: 0 } : { rotateY: 90, opacity: 0 }} transition={{ duration: 0.45, ease: 'easeInOut' }}>
         <div className="as-collectible-top"><span className="as-lvl-bar"><i style={{ width: `${Math.min(100, level.level / 8 * 100)}%` }}/></span><small>{index + 1}/{ranked.length}</small></div>
-        <small className="as-collectible-lvl">LVL {level.level} · {level.title.toUpperCase()}</small>
+        <small className="as-collectible-lvl">LVL {level.level} · {(tierForRank(index, s?.monthlyXp || 0) || 'unranked').toUpperCase()}</small>
         <div className="as-collectible-art"><Avatar member={member}/></div>
         <small className="as-collectible-season">SEASON {new Date().getUTCFullYear()} · #{index + 1}</small>
-        {tierForRank(index) && <span className="as-collectible-tier"><RankEmblem tier={tierForRank(index)!} size={34}/></span>}
+        {tierForRank(index, s?.monthlyXp || 0) && <span className="as-collectible-tier"><RankEmblem tier={tierForRank(index, s?.monthlyXp || 0)!} size={34}/></span>}
         <strong>{member.name}</strong>
         <div className="as-collectible-icons"><ArenaIcon name="git" size={16}/><span className="as-barcode"/><ArenaIcon name={badge?.rarity === 'legendary' ? 'star' : 'shield'} size={16}/></div>
       </motion.div></AnimatePresence>
     </div>
     <div className="as-summary">
-      <span className="as-kicker"><ArenaIcon name="target" size={16}/> PLAYER CHECKPOINT <RankTierChip rank={index} size={18}/></span>
+      <span className="as-kicker"><ArenaIcon name="target" size={16}/> PLAYER CHECKPOINT <RankTierChip rank={index} xp={s?.monthlyXp || 0} size={18}/></span>
       <h2>Summary</h2>
       <AnimatePresence mode="wait"><motion.div key={member.login} className="as-summary-grid" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3 }}>
         {stat('bolt', 'XP this month', number(s?.monthlyXp || 0))}{stat('git', 'Commits', number(s?.monthlyCommits || 0))}{stat('merge', 'PRs merged', number(s?.monthlyPRsMerged || 0))}{stat('review', 'Reviews', number(s?.monthlyPRsReviewed || 0))}{stat('flame', 'Streak', `${s?.streak || 0} days`)}{stat('medal', 'Latest badge', badge?.name || 'None yet')}
@@ -198,7 +199,7 @@ function ArenaMoment({ overlay, onDone }: { overlay: { type: string; payload: Re
   const type = overlay.type, login = String(overlay.payload.login || 'THE TEAM');
   const tier = type === 'tier-up' ? overlay.payload.tier as 'radiant' | 'immortal' | 'ascendant' | undefined : undefined;
   const title = tier ? tier.toUpperCase() : type === 'first-blood' ? 'FIRST BLOOD' : type === 'ace' ? 'ACE' : type === 'level-up' ? 'LEVEL UP' : type === 'boss-victory' ? 'LOCKED IN' : type === 'overtaken' ? 'RANK UP' : 'UNLOCKED';
-  const detail = tier ? 'PROMOTED · TOP 3 THIS MONTH' : type === 'first-blood' ? 'FIRST SCORED PLAY OF THE DAY' : type === 'ace' ? 'FIVE SCORED PLAYS IN 15 MINUTES' : type === 'level-up' ? `LEVEL ${overlay.payload.level} · ${String(overlay.payload.title || '').toUpperCase()}` : type === 'boss-victory' ? 'EVERY MONTHLY GOAL CLEARED' : type === 'overtaken' ? `NOW RANKED #${overlay.payload.newRank}` : String(getBadgeDef(String(overlay.payload.badgeId))?.name || 'NEW AWARD').toUpperCase();
+  const detail = tier ? 'PROMOTED · TOP 3 THIS MONTH' : type === 'first-blood' ? 'FIRST SCORED PLAY OF THE DAY' : type === 'ace' ? 'FIVE SCORED PLAYS IN 15 MINUTES' : type === 'level-up' ? `LEVEL ${overlay.payload.level} · LIFETIME XP` : type === 'boss-victory' ? 'EVERY MONTHLY GOAL CLEARED' : type === 'overtaken' ? `NOW RANKED #${overlay.payload.newRank}` : String(getBadgeDef(String(overlay.payload.badgeId))?.name || 'NEW AWARD').toUpperCase();
   return <motion.div className={`as-moment as-moment--${tier || type}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
     <motion.div className="as-moment-band" initial={{ x: '-110%', skewX: -12 }} animate={{ x: 0, skewX: -12 }} exit={{ x: '110%', skewX: -12 }} transition={{ type: 'spring', stiffness: 120, damping: 20 }}>
       <div className="as-moment-inner">{tier && <div className="as-moment-emblem"><RankEmblem tier={tier} size={110}/></div>}<span>{type === 'boss-victory' ? 'TEAM VICTORY' : login}</span><h2>{title}</h2><small>{detail}</small></div>

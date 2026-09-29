@@ -295,3 +295,21 @@
 .as-card-top .as-card-rank { display: flex; align-items: center; gap: 8px; }
 .as-card-fire { display: grid; place-items: center; width: 30px; height: 30px; color: #1c0a00; background: linear-gradient(135deg, #ffb13b, #ff5a1f); border-radius: 50%; box-shadow: 0 0 16px rgba(255,110,40,.7); animation: x-flicker 1.2s steps(3) infinite; }
 @media (max-height: 950px) and (min-width: 1051px) { .as-card-fire { width: 22px; height: 22px; } .as-card-fire svg { width: 12px; height: 12px; } .as-plate-line { padding: 3px 7px; } }
+
+/* Full Valorant ladder below the top three (by this month's placement). */
+.as-card--diamond { --tier: #c77dff; --tier-rgb: 199,125,255; border-color: rgba(199,125,255,.55); }
+.as-card--diamond .as-card-rank { color: #c77dff; }
+.as-card--platinum { --tier: #3cc6d4; --tier-rgb: 60,198,212; border-color: rgba(60,198,212,.55); }
+.as-card--platinum .as-card-rank { color: #3cc6d4; }
+.as-card--gold { --tier: #e8b93a; --tier-rgb: 232,185,58; border-color: rgba(232,185,58,.55); }
+.as-card--gold .as-card-rank { color: #e8b93a; }
+.as-card--silver { --tier: #b9c3cc; --tier-rgb: 185,195,204; border-color: rgba(185,195,204,.55); }
+.as-card--silver .as-card-rank { color: #b9c3cc; }
+.as-card--bronze { --tier: #c98a55; --tier-rgb: 201,138,85; border-color: rgba(201,138,85,.55); }
+.as-card--bronze .as-card-rank { color: #c98a55; }
+.as-card--iron { --tier: #8d9199; --tier-rgb: 141,145,153; border-color: rgba(141,145,153,.55); }
+.as-card--iron .as-card-rank { color: #8d9199; }
+.as-card--unranked .as-plate-tag { color: var(--as-muted); }
+.as-mini-tier { position: absolute; z-index: 1; top: 8px; left: 10px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+.as-mini-fire { left: 48px; }
+.as-mini-copy small { text-transform: uppercase; }

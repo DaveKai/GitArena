@@ -40,10 +40,11 @@ export function playEventSound(type: string) {
     case 'overtaken': sfxOvertaken(); break;
     case 'achievement': sfxAchievement('rare'); break;
     case 'boss-victory': sfxBossVictory(); break;
-    case 'tier-up': sfxAchievement('legendary'); break;
+    case 'tier-up': sfxUltReady(); break;
     case 'first-blood': sfxFirstBlood(); break;
     case 'ace': sfxAce(); break;
-    case 'interstitial': sfxSweep(); break;
+    case 'interstitial': sfxRoundStart(); break;
+    case 'spike': sfxSpike(); break;
     default: sfxXp();
   }
 }
@@ -174,4 +175,54 @@ export function sfxAce() {
 /** Soft sweep for screen takeovers */
 export function sfxSweep() {
   [330, 440, 587].forEach((f, i) => setTimeout(() => playTone(f, 0.22, 'sine', 0.05), i * 60));
+}
+
+/** Filtered noise burst, used for impacts and whooshes. */
+function playNoise(duration: number, vol: number, from: number, to: number) {
+  if (!enabled) return;
+  let c: AudioContext;
+  try { c = getCtx(); } catch { return; }
+  const buffer = c.createBuffer(1, Math.floor(c.sampleRate * duration), c.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource(), filter = c.createBiquadFilter(), gain = c.createGain();
+  src.buffer = buffer; filter.type = 'bandpass'; filter.Q.value = 1.2;
+  filter.frequency.setValueAtTime(from, c.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(to, c.currentTime + duration);
+  gain.gain.setValueAtTime(vol * MASTER_VOLUME, c.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration);
+  src.connect(filter).connect(gain).connect(c.destination);
+  src.start();
+}
+
+/**
+ * Tactical-shooter style kill confirm: a crisp ping that climbs with each
+ * play in a streak (1..5), stacking extra pings like a multi-kill banner.
+ */
+export function sfxKill(streak: number) {
+  const n = Math.max(1, Math.min(5, streak));
+  const base = [880, 988, 1109, 1245, 1397][n - 1];
+  playNoise(0.07, 0.10, 3000, 1200);
+  for (let i = 0; i < n; i++) setTimeout(() => { playTone(base + i * 60, 0.09, 'square', 0.045); playTone((base + i * 60) * 2, 0.07, 'sine', 0.03); }, 40 + i * 70);
+}
+
+/** "Ultimate ready": a rising charged shimmer that lands on a bright chord. */
+export function sfxUltReady() {
+  playNoise(0.7, 0.05, 400, 5000);
+  [392, 523, 659, 784, 1047].forEach((f, i) => setTimeout(() => playTone(f, 0.16, 'triangle', 0.07), i * 90));
+  setTimeout(() => { playTone(1047, 0.8, 'sine', 0.12); playTone(1568, 0.8, 'sine', 0.06, 8); playTone(523, 0.8, 'triangle', 0.07); }, 470);
+}
+
+/** Round start: low two-tone horn over a whoosh. */
+export function sfxRoundStart() {
+  playNoise(0.5, 0.06, 300, 2400);
+  playTone(196, 0.35, 'sawtooth', 0.05);
+  setTimeout(() => playTone(294, 0.5, 'sawtooth', 0.05), 260);
+}
+
+/** Planted-device beeps that speed up, then a sharp chirp. */
+export function sfxSpike() {
+  let t = 0, gap = 420;
+  for (let i = 0; i < 7; i++) { setTimeout(() => playTone(1760, 0.07, 'square', 0.04), t); t += gap; gap *= 0.72; }
+  setTimeout(() => playTone(2349, 0.25, 'sine', 0.06), t + 60);
 }
