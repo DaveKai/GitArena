@@ -220,11 +220,13 @@ button:focus-visible { outline: 2px solid #dcfa6b; outline-offset: 3px; }
 .ui-root--arena .primary-action { color: #fff; background: #6c5cf0; }
 .ui-root--arena .secondary-action { color: #e6e3ff; background: #2a2a48; }
 /* Display style switch (shared by both views) */
-.ui-root { --acid: #dcfa6b; position: relative; min-height: 100vh; overflow: hidden; }
+.ui-root { --acid: #dcfa6b; position: relative; background: #080e10; min-height: 100vh; overflow: hidden; }
 .ui-switch { position: relative; flex: none; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); }
 .ui-switch button { position: relative; z-index: 1; padding: 8px 12px; color: #9aa4a0; background: none; border: 0; font: 700 11px/1 'Geist Mono Variable', monospace; letter-spacing: .14em; transition: color .3s; }
 .ui-switch button.active { color: #fff; }
 .ui-switch-thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: #6c5cf0; box-shadow: 0 0 16px rgba(108,92,240,.55); }
+
+.ui-root--arena { background: #141522; }
 .ui-switch--arena .ui-switch-thumb { left: 50%; }
 .ui-root--broadcast .ui-switch-thumb { background: var(--acid, #dcfa6b); box-shadow: 0 0 14px rgba(220,250,107,.35); }
 .ui-root--broadcast .ui-switch button.active { color: #081012; }

@@ -149,8 +149,8 @@ export default function App() {
     try { return localStorage.getItem('gitarena-ui') === 'arena' ? 'arena' : 'broadcast'; } catch { return 'broadcast'; }
   });
   const reduced = useReducedMotion();
-  const [wipe, setWipe] = useState(0);
-  const changeUi = (mode: UiMode) => { if (mode !== uiMode) setWipe(n => n + 1); setUiMode(mode); try { localStorage.setItem('gitarena-ui', mode); } catch { /* storage unavailable */ } };
+  const [wipe, setWipe] = useState(0), [wiping, setWiping] = useState(false);
+  const changeUi = (mode: UiMode) => { if (mode !== uiMode) { setWipe(n => n + 1); setWiping(true); } setUiMode(mode); try { localStorage.setItem('gitarena-ui', mode); } catch { /* storage unavailable */ } };
   const previousFeedId = useRef<string | null>(null), previousOverlay = useRef<string | null>(null);
   const complete = bossGoals.length > 0 && bossIndex >= bossGoals.length;
   const goal = complete ? { label: 'ALL GOALS COMPLETE', metric: 'complete', target: 1 } : bossGoals[bossIndex] || { label: 'NO OBJECTIVE SET', metric: 'none', target: 1 };
@@ -165,12 +165,10 @@ export default function App() {
   const expand = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.().catch(() => {}); };
   const soundOn = soundChoice === true, toggleSound = () => chooseSound(!soundChoice);
   return <div className={`ui-root ui-root--${uiMode}`}>
-    <AnimatePresence mode="wait" initial={false}>
       {uiMode === 'arena'
-        ? <motion.div key="arena" className="ui-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0.1 : 0.35 }}><ArenaSelectView now={now} soundOn={soundOn} onSound={toggleSound} uiMode={uiMode} onUiMode={changeUi}/></motion.div>
-        : <motion.div key="broadcast" className="ui-view arena-shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0.1 : 0.35 }}><Header isDemo={isDemo} memberCount={members.length} now={now} periodStart={periodStart} soundOn={soundOn} onSound={toggleSound} onExpand={expand} uiMode={uiMode} onUiMode={changeUi}/><main className="arena-main"><Standings members={members} stats={stats}/><div className="arena-right"><Mission progress={complete ? 1 : bossProgress[goal.metric] || 0} goal={goal} teamXp={teamXp} complete={complete}/><Activity feed={feed} members={members} now={now}/></div></main><FeatureStage members={members} stats={stats} feed={feed} shamePRs={shamePRs}/><footer className="arena-footer"><span>GITARENA <b>/</b> BUILD TOGETHER. WIN TOGETHER.</span><span>EVERY COMMIT WRITES THE STORY <ArenaIcon name="arrow" size={15}/></span></footer><AnimatePresence>{overlay && <Celebration key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence></motion.div>}
-    </AnimatePresence>
-    {!reduced && wipe > 0 && <motion.div key={wipe} className="ui-wipe" initial={{ x: '-120%' }} animate={{ x: '120%' }} transition={{ duration: 0.9, ease: [0.7, 0, 0.3, 1] }} aria-hidden="true"/>}
+        ? <motion.div key="arena" className="ui-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0.1 : 0.35, delay: reduced ? 0 : 0.25 }}><ArenaSelectView now={now} soundOn={soundOn} onSound={toggleSound} uiMode={uiMode} onUiMode={changeUi}/></motion.div>
+        : <motion.div key="broadcast" className="ui-view arena-shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0.1 : 0.35, delay: reduced ? 0 : 0.25 }}><Header isDemo={isDemo} memberCount={members.length} now={now} periodStart={periodStart} soundOn={soundOn} onSound={toggleSound} onExpand={expand} uiMode={uiMode} onUiMode={changeUi}/><main className="arena-main"><Standings members={members} stats={stats}/><div className="arena-right"><Mission progress={complete ? 1 : bossProgress[goal.metric] || 0} goal={goal} teamXp={teamXp} complete={complete}/><Activity feed={feed} members={members} now={now}/></div></main><FeatureStage members={members} stats={stats} feed={feed} shamePRs={shamePRs}/><footer className="arena-footer"><span>GITARENA <b>/</b> BUILD TOGETHER. WIN TOGETHER.</span><span>EVERY COMMIT WRITES THE STORY <ArenaIcon name="arrow" size={15}/></span></footer><AnimatePresence>{overlay && <Celebration key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence></motion.div>}
+    {!reduced && wiping && <motion.div key={wipe} className="ui-wipe" initial={{ x: '-90vw' }} animate={{ x: '120vw' }} transition={{ duration: 0.9, ease: [0.7, 0, 0.3, 1] }} onAnimationComplete={() => setWiping(false)} aria-hidden="true"/>}
     {soundChoice === null && <SoundPrompt onChoice={chooseSound}/>}
   </div>;
 }
