@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useStore } from '../../store/useStore';
 import { ArenaIcon, type IconName } from '../ui/ArenaIcon';
-import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, isTopTier, tierForRank, compact, elapsed, eventIcons, number, rankBy, type UiMode } from '../shared';
+import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, isTopTier, rankGap, tierForRank, compact, elapsed, eventIcons, number, rankBy, type UiMode } from '../shared';
 import { getLevel } from '../../lib/xp';
 import { getBadgeDef } from '../../lib/badges';
-import { MatchPointChip, seasonClock } from '../extras';
+import { MatchPointChip, SpikeChip, seasonClock } from '../extras';
 import type { DevStats, FeedItem, Member } from '../../types';
 import './arena.css';
 
@@ -30,6 +30,7 @@ function TopBar({ now, periodStart, isDemo, memberCount, section, soundOn, onSou
     <span className="as-top-rule"/>
     <nav className="as-sections" aria-label="Display sections">{sections.map((s, i) => <span key={s.label} className={i === section ? 'active' : ''}><ArenaIcon name={s.icon} size={18}/>{s.label}{i === section && <motion.i layoutId="as-section-line"/>}</span>)}</nav>
     <div className="as-top-spacer"/>
+    <SpikeChip/>
     <MatchPointChip periodStart={periodStart} now={now}/>
     <span className="as-status"><i/>{isDemo ? 'DEMO' : 'LIVE'}</span>
     <span className="as-top-meta"><ArenaIcon name="users" size={17}/>{memberCount}</span>
@@ -81,7 +82,7 @@ function Abilities({ s }: { s?: DevStats }) {
   return <div className="as-abilities">{items.map(([icon, value, label]) => <span key={label} title={label}><ArenaIcon name={icon} size={17}/><b>{compact(value)}</b></span>)}</div>;
 }
 
-function AgentCard({ member, s, rank, focused, rose, onFire }: { member: Member; s?: DevStats; rank: number; focused: boolean; rose: boolean; onFire: boolean }) {
+function AgentCard({ member, s, rank, focused, rose, onFire, gap }: { member: Member; s?: DevStats; rank: number; focused: boolean; rose: boolean; onFire: boolean; gap: string }) {
   const leader = rank === 0, tier = tierForRank(rank, s?.monthlyXp || 0), level = getLevel(s?.totalXp || 0);
   return <motion.article layout className={`as-card ${leader ? 'is-leader' : ''} ${focused ? 'is-focused' : ''} ${tier ? `as-card--${tier}` : 'as-card--unranked'} ${isTopTier(tier) ? 'as-card--top' : ''} ${onFire ? 'is-onfire' : ''}`} transition={{ layout: { type: 'spring', stiffness: 170, damping: 22 } }}>
     <div className="as-card-art">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : <span style={{ background: member.color }}/>}</div>
@@ -98,6 +99,7 @@ function AgentCard({ member, s, rank, focused, rose, onFire }: { member: Member;
       </div>
       <h3>{member.name}</h3>
       <AnimatedScore xp={s?.monthlyXp || 0} className="as-card-xp"/>
+      {gap && <small className={`as-card-gap ${leader ? 'is-lead' : ''}`}><ArenaIcon name="arrow" size={12}/>{gap}</small>}
       <Abilities s={s}/>
     </div>
   </motion.article>;
@@ -134,7 +136,7 @@ function AgentCards({ ranked, stats, active, hot }: { ranked: Member[]; stats: R
   const shown = rest.slice(page * 5, page * 5 + 5);
   return <section className={`as-select ${active ? 'is-called' : ''}`}>
     <div className="as-select-head"><h1>The Standings</h1><span>MONTHLY XP · TOP 5 LOCKED</span></div>
-    <div className="as-cards">{top.length === 0 ? <div className="as-empty">THE ARENA IS QUIET</div> : top.map((m, i) => <AgentCard key={m.login} member={m} s={stats[m.login]} rank={i} focused={i !== 0 && i === focus} rose={!!risen[m.login]} onFire={hot.has(m.login)}/>)}</div>
+    <div className="as-cards">{top.length === 0 ? <div className="as-empty">THE ARENA IS QUIET</div> : top.map((m, i) => <AgentCard key={m.login} member={m} s={stats[m.login]} rank={i} focused={i !== 0 && i === focus} rose={!!risen[m.login]} onFire={hot.has(m.login)} gap={rankGap(ranked, stats, i)}/>)}</div>
     {rest.length > 0 && <div className="as-bench">
       <div className="as-bench-label"><span>THE BENCH</span><small>{pages > 1 ? `${page + 1} / ${pages}` : `${rest.length}`}</small></div>
       <div className="as-bench-cards"><AnimatePresence mode="wait" initial={false}><motion.div key={page} className="as-bench-page">{shown.map((m, i) => <MiniCard key={m.login} member={m} s={stats[m.login]} rank={5 + page * 5 + i} onFire={hot.has(m.login)}/>)}</motion.div></AnimatePresence></div>
@@ -198,8 +200,8 @@ function ArenaMoment({ overlay, onDone }: { overlay: { type: string; payload: Re
   useEffect(() => { const id = setTimeout(onDone, overlay.type === 'boss-victory' ? 5500 : 3800); return () => clearTimeout(id); }, [overlay, onDone]);
   const type = overlay.type, login = String(overlay.payload.login || 'THE TEAM');
   const tier = type === 'tier-up' ? overlay.payload.tier as 'radiant' | 'immortal' | 'ascendant' | undefined : undefined;
-  const title = tier ? tier.toUpperCase() : type === 'first-blood' ? 'FIRST BLOOD' : type === 'ace' ? 'ACE' : type === 'level-up' ? 'LEVEL UP' : type === 'boss-victory' ? 'LOCKED IN' : type === 'overtaken' ? 'RANK UP' : 'UNLOCKED';
-  const detail = tier ? 'PROMOTED · TOP 3 THIS MONTH' : type === 'first-blood' ? 'FIRST SCORED PLAY OF THE DAY' : type === 'ace' ? 'FIVE SCORED PLAYS IN 15 MINUTES' : type === 'level-up' ? `LEVEL ${overlay.payload.level} · LIFETIME XP` : type === 'boss-victory' ? 'EVERY MONTHLY GOAL CLEARED' : type === 'overtaken' ? `NOW RANKED #${overlay.payload.newRank}` : String(getBadgeDef(String(overlay.payload.badgeId))?.name || 'NEW AWARD').toUpperCase();
+  const title = type === 'spike-planted' ? 'SPIKE PLANTED' : type === 'spike-defused' ? 'DEFUSED' : tier ? tier.toUpperCase() : type === 'first-blood' ? 'FIRST BLOOD' : type === 'ace' ? 'ACE' : type === 'level-up' ? 'LEVEL UP' : type === 'boss-victory' ? 'LOCKED IN' : type === 'overtaken' ? 'RANK UP' : 'UNLOCKED';
+  const detail = type === 'spike-planted' ? `${overlay.payload.repo} / ${overlay.payload.branch} · ${overlay.payload.workflow}`.toUpperCase() : type === 'spike-defused' ? `${overlay.payload.repo} / ${overlay.payload.branch} · BUILD IS GREEN`.toUpperCase() : tier ? 'PROMOTED · TOP 3 THIS MONTH' : type === 'first-blood' ? 'FIRST SCORED PLAY OF THE DAY' : type === 'ace' ? 'FIVE SCORED PLAYS IN 15 MINUTES' : type === 'level-up' ? `LEVEL ${overlay.payload.level} · LIFETIME XP` : type === 'boss-victory' ? 'EVERY MONTHLY GOAL CLEARED' : type === 'overtaken' ? `NOW RANKED #${overlay.payload.newRank}` : String(getBadgeDef(String(overlay.payload.badgeId))?.name || 'NEW AWARD').toUpperCase();
   return <motion.div className={`as-moment as-moment--${tier || type}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
     <motion.div className="as-moment-band" initial={{ x: '-110%', skewX: -12 }} animate={{ x: 0, skewX: -12 }} exit={{ x: '110%', skewX: -12 }} transition={{ type: 'spring', stiffness: 120, damping: 20 }}>
       <div className="as-moment-inner">{tier && <div className="as-moment-emblem"><RankEmblem tier={tier} size={110}/></div>}<span>{type === 'boss-victory' ? 'TEAM VICTORY' : login}</span><h2>{title}</h2><small>{detail}</small></div>

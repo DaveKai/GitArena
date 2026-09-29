@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../store/useStore';
 import { playEventSound } from '../lib/sounds';
 import { ArenaIcon, type IconName } from './ui/ArenaIcon';
-import { Avatar, RankEmblem, eventIcons, number, rankBy, tierForRank } from './shared';
-import type { DevStats, FeedItem, Member, SeasonRecap, ShamePR } from '../types';
+import { Avatar, RankEmblem, elapsed, eventIcons, number, rankBy, tierForRank } from './shared';
+import type { CiAlert, DevStats, FeedItem, Member, SeasonRecap, ShamePR } from '../types';
 import './extras.css';
 
 const MIN = 60000, DAY = 86400000;
@@ -130,11 +130,14 @@ export function QuietScreen({ now, until }: { now: number; until: number }) {
   </motion.div>;
 }
 
-type Kind = 'recap' | 'rivalry' | 'play' | 'radar';
+type Kind = 'spike' | 'scoreboard' | 'recap' | 'rivalry' | 'play' | 'radar';
 type Snapshot = ReturnType<typeof useStore.getState>;
-const order: Kind[] = ['rivalry', 'recap', 'play', 'radar'];
+const order: Kind[] = ['spike', 'scoreboard', 'rivalry', 'recap', 'play', 'radar'];
+const takeoverSeconds = (kind: Kind) => kind === 'recap' ? 15 : kind === 'scoreboard' ? 13 : 9;
 
 function buildTakeover(kind: Kind, s: Snapshot, forced: boolean) {
+  if (kind === 'spike') return s.ciAlerts.length ? { kind, alerts: s.ciAlerts } : null;
+  if (kind === 'scoreboard') return Object.values(s.stats).filter(x => x.monthlyXp > 0).length >= 2 ? { kind } : null;
   if (kind === 'rivalry') {
     const ranked = rankBy(s.members, s.stats).filter(m => (s.stats[m.login]?.monthlyXp || 0) > 0).slice(0, 8);
     let best: { a: Member; b: Member; rank: number; gap: number } | null = null;
@@ -159,7 +162,8 @@ function buildTakeover(kind: Kind, s: Snapshot, forced: boolean) {
 type Takeover = NonNullable<ReturnType<typeof buildTakeover>>;
 
 /**
- * Full-screen interludes every `?takeoverEvery=` seconds (default 150):
+ * Full-screen interludes every `?takeoverEvery=` seconds (default 300):
+ * failing-build spike, tab scoreboard,
  * rivalry VS, play of the day, review radar, and the season recap in the
  * first days of a month. `?takeover=<kind>` previews one kind on a loop.
  */
@@ -170,14 +174,14 @@ export function Takeovers({ blocked }: { blocked: boolean }) {
   blockedRef.current = blocked;
   useEffect(() => {
     const forced = order.includes(params().get('takeover') as Kind) ? params().get('takeover') as Kind : null;
-    const every = Math.max(20, Number(params().get('takeoverEvery')) || 150) * 1000;
+    const every = Math.max(20, Number(params().get('takeoverEvery')) || 300) * 1000;
     const run = () => {
       if (blockedRef.current) return;
       const s = useStore.getState();
       for (let n = 0; n < order.length; n++) {
         const kind = forced || order[(cursor.current + n) % order.length];
         const next = buildTakeover(kind, s, !!forced);
-        if (next) { cursor.current = (order.indexOf(kind) + 1) % order.length; setShow(next); playEventSound(kind === 'radar' ? 'spike' : 'interstitial'); return; }
+        if (next) { cursor.current = (order.indexOf(kind) + 1) % order.length; setShow(next); playEventSound(kind === 'radar' || kind === 'spike' ? 'spike' : 'interstitial'); return; }
         if (forced) return;
       }
     };
@@ -185,13 +189,15 @@ export function Takeovers({ blocked }: { blocked: boolean }) {
     const id = setInterval(run, forced ? 20000 : every);
     return () => { clearTimeout(first); clearInterval(id); };
   }, []);
-  useEffect(() => { if (!show) return; const id = setTimeout(() => setShow(null), show.kind === 'recap' ? 15000 : 9000); return () => clearTimeout(id); }, [show]);
+  useEffect(() => { if (!show) return; const id = setTimeout(() => setShow(null), takeoverSeconds(show.kind) * 1000); return () => clearTimeout(id); }, [show]);
   return <AnimatePresence>{show && <motion.div key={show.kind} className={`takeover takeover--${show.kind}`} initial={{ clipPath: 'polygon(0 0, 0 0, 0 100%, 0 100%)' }} animate={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' }} exit={{ opacity: 0 }} transition={{ duration: 0.55, ease: [0.7, 0, 0.3, 1] }}>
+    {show.kind === 'spike' && <SpikeTakeover alerts={show.alerts} members={members}/>}
+    {show.kind === 'scoreboard' && <Scoreboard/>}
     {show.kind === 'rivalry' && <Rivalry {...show}/>}
     {show.kind === 'play' && <PlayOfTheDay item={show.item} members={members}/>}
     {show.kind === 'radar' && <ReviewRadar prs={show.prs} total={show.total}/>}
     {show.kind === 'recap' && <Recap season={show.season} members={members}/>}
-    <motion.span className="takeover-timer" initial={{ scaleX: 1 }} animate={{ scaleX: 0 }} transition={{ duration: show.kind === 'recap' ? 15 : 9, ease: 'linear' }}/>
+    <motion.span className="takeover-timer" initial={{ scaleX: 1 }} animate={{ scaleX: 0 }} transition={{ duration: takeoverSeconds(show.kind), ease: 'linear' }}/>
   </motion.div>}</AnimatePresence>;
 }
 
@@ -263,5 +269,61 @@ function Recap({ season, members }: { season: SeasonRecap; members: Member[] }) 
       {award('Most commits', 'git', 'commits', 'commits')}{award('Top closer', 'merge', 'merges', 'merges')}{award('Top reviewer', 'review', 'reviews', 'reviews')}{award('Longest streak', 'flame', 'streak', 'days')}
       <div className="tk-award"><ArenaIcon name="users" size={22}/><span>Team total</span><strong>{season.standings.length} players</strong><b>{number(season.teamXp)} XP</b></div>
     </motion.div>
+  </div>;
+}
+
+const since = (time: string) => { const m = Math.max(0, Math.floor((Date.now() - Date.parse(time)) / MIN)); return m < 60 ? `${m}M` : `${Math.floor(m / 60)}H ${m % 60}M`; };
+
+export function SpikeChip() {
+  const alerts = useStore(s => s.ciAlerts);
+  if (!alerts.length) return null;
+  return <span className="spike-chip" title={alerts.map(a => `${a.repo}/${a.branch}: ${a.workflow}`).join('\n')}><SpikeGlyph size={16}/>{alerts.length === 1 ? `SPIKE · ${alerts[0].repo.toUpperCase()}` : `${alerts.length} SPIKES PLANTED`}</span>;
+}
+
+export function SpikeGlyph({ size = 120 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3 40 24 24 45 8 24Z" fill="#2a0a12" stroke="#ff4d6d" strokeWidth="2.4"/><path d="M24 11v26M16 24h16" stroke="#ff4d6d" strokeWidth="2.4" strokeLinecap="round"/><circle cx="24" cy="24" r="4.2" fill="#ff4d6d"/></svg>;
+}
+
+function SpikeTakeover({ alerts, members }: { alerts: CiAlert[]; members: Member[] }) {
+  return <div className="tk-spike">
+    <motion.div className="tk-spike-icon" animate={{ scale: [1, 1.07, 1] }} transition={{ repeat: Infinity, duration: 0.85 }}><SpikeGlyph size={300}/></motion.div>
+    <div className="tk-radar-list">
+      <span className="tk-kicker tk-kicker--red"><ArenaIcon name="alert" size={18}/> BUILD BROKEN</span>
+      <h1>Spike planted</h1>
+      {alerts.slice(0, 4).map((a, i) => <motion.div key={`${a.repo}:${a.branch}`} className="tk-pr tk-pr--red" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 + i * 0.2 }}><div><strong>{a.repo} / {a.branch}</strong><small>{a.workflow}{a.actor ? ` · pushed by ${nameOf(members, a.actor)}` : ''}</small></div><b>{since(a.since)}</b></motion.div>)}
+      <em>Get the build green to defuse it.</em>
+    </div>
+  </div>;
+}
+
+function Scoreboard() {
+  const members = useStore(s => s.members), stats = useStore(s => s.stats), feed = useStore(s => s.feed), activeDays = useStore(s => s.activeDays);
+  const ranked = rankBy(members, stats);
+  const hot = hotLogins(feed, Date.now());
+  const perDay = (login: string) => { const s = stats[login]; const d = activeDays[login] || 0; return s && d ? Math.round(s.monthlyXp / d) : 0; };
+  const cols: Array<{ key: string; label: string; value: (m: Member) => number; fmt?: (n: number, m: Member) => string }> = [
+    { key: 'xp', label: 'XP', value: m => stats[m.login]?.monthlyXp || 0 },
+    { key: 'commits', label: 'Commits', value: m => stats[m.login]?.monthlyCommits || 0 },
+    { key: 'merges', label: 'Merges', value: m => stats[m.login]?.monthlyPRsMerged || 0 },
+    { key: 'reviews', label: 'Reviews', value: m => stats[m.login]?.monthlyPRsReviewed || 0 },
+    { key: 'perday', label: 'XP / day', value: m => perDay(m.login) },
+    { key: 'streak', label: 'Streak', value: m => stats[m.login]?.streak || 0, fmt: n => `${n}D` },
+  ];
+  const best = Object.fromEntries(cols.map(c => [c.key, Math.max(0, ...ranked.map(c.value))]));
+  const last = (login: string) => { const t = feed.find(f => f.user === login)?.time || stats[login]?.lastActivityTime; return t ? elapsed(t, Date.now()) : '—'; };
+  return <div className="tk-board">
+    <div className="tk-board-head"><span className="tk-kicker"><ArenaIcon name="users" size={18}/> SCOREBOARD · THIS MONTH</span><h1>Scoreboard</h1></div>
+    <div className="tk-table" style={{ gridTemplateRows: `auto repeat(${ranked.length}, minmax(0, 1fr))` }}>
+      <div className="tk-row tk-row--head"><span>#</span><span>Player</span>{cols.map(c => <span key={c.key}>{c.label}</span>)}<span>Last play</span></div>
+      {ranked.map((m, i) => {
+        const xp = stats[m.login]?.monthlyXp || 0, tier = tierForRank(i, xp);
+        return <motion.div key={m.login} className={`tk-row ${tier ? `tk-row--${tier}` : 'tk-row--unranked'}`} initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 + i * 0.05 }}>
+          <span className="tk-rank">{tier ? <RankEmblem tier={tier} size={30}/> : null}<b>{i + 1}</b></span>
+          <span className="tk-player"><Avatar member={m}/><strong>{m.name}</strong>{hot.has(m.login) && <ArenaIcon name="flame" size={16} className="tk-hot"/>}{!tier && <small>UNRANKED</small>}</span>
+          {cols.map(c => { const v = c.value(m); return <span key={c.key} className={`tk-num ${v > 0 && v === best[c.key] ? 'is-best' : ''}`}>{c.fmt ? c.fmt(v, m) : number(v)}</span>; })}
+          <span className="tk-last">{last(m.login)}</span>
+        </motion.div>;
+      })}
+    </div>
   </div>;
 }

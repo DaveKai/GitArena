@@ -112,6 +112,18 @@ interface ServerState {
   defaultBranches?: Record<string, string>;
   lastSeason?: SeasonRecap;
   promotionRescoreMonth?: string;
+  ciStatus?: Record<string, CiStatus>;
+}
+
+/** Latest CI result per repo branch; a failing one is a "planted spike" on the TV. */
+interface CiStatus {
+  repo: string;
+  branch: string;
+  failing: boolean;
+  workflow: string;
+  url: string;
+  since: string;
+  actor?: string;
 }
 
 /** Final standings of the previous month, kept for the TV's season recap. */
@@ -271,6 +283,7 @@ const processedPushIds = new Set<string>(state.processedPushIds || []);
 const pushReplayDoneRepos = new Set<string>(state.pushReplayDoneRepos || []);
 const serverStartedAt = new Date().toISOString();
 state.repoPushedAt ||= {};
+state.ciStatus ||= {};
 state.branchHeads ||= {};
 state.scoreLedger ||= {};
 state.commitDiffCache ||= {};
@@ -1762,6 +1775,61 @@ async function fullSync(): Promise<void> {
 }
 
 // ── Client-facing state ──────────────────────────
+// ── CI watch ─────────────────────────────────────
+// Polls GitHub Actions on the scoring branches of recently pushed repos.
+// A newly failing branch plants a spike; the next green run defuses it.
+const ciEtags = new Map<string, string>();
+const ciRuns = new Map<string, Array<Record<string, unknown>>>();
+const CI_FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
+async function pollCi(): Promise<void> {
+  if (DEMO_MODE || Date.now() < ghRateLimitedUntil.core) return;
+  const cutoff = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const repos = Object.entries(state.repoPushedAt || {})
+    .filter(([name, pushed]) => pushed >= cutoff && (!GH_REPOS.length || GH_REPOS.includes(name)))
+    .sort((a, b) => b[1].localeCompare(a[1])).slice(0, 20).map(([name]) => name);
+  let changed = false;
+  for (const repo of repos) {
+    const branches = await existingScoringBranches(repo);
+    if (!branches) continue;
+    for (const branch of branches) {
+      const key = `${repo}:${branch}`;
+      const url = `${BASE}/repos/${GH_ORG}/${encodeURIComponent(repo)}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=30&exclude_pull_requests=true`;
+      const result = await ghFetch(url, ciEtags.get(url));
+      if (!result.ok) continue;
+      if (result.etag) ciEtags.set(url, result.etag);
+      if (!result.notModified) ciRuns.set(url, ((result.data as Record<string, unknown> | null)?.workflow_runs as Array<Record<string, unknown>>) || []);
+      const runs = (ciRuns.get(url) || []).filter(run => run.event !== 'pull_request' && run.status === 'completed' && run.conclusion !== 'cancelled' && run.conclusion !== 'skipped');
+      // Newest completed run per workflow decides that workflow's state.
+      const latest = new Map<string, Record<string, unknown>>();
+      for (const run of runs) { const id = String(run.workflow_id); if (!latest.has(id)) latest.set(id, run); }
+      const previous = state.ciStatus![key];
+      if (!latest.size) { if (previous) { delete state.ciStatus![key]; changed = true; } continue; }
+      const failed = [...latest.values()].filter(run => CI_FAILED.has(String(run.conclusion)));
+      const actorOf = (run: Record<string, unknown>) => (run.triggering_actor as Record<string, string> | undefined)?.login || (run.actor as Record<string, string> | undefined)?.login;
+      if (failed.length) {
+        const run = failed[0];
+        const next: CiStatus = { repo, branch, failing: true, workflow: failed.map(r => String(r.name || 'CI')).join(', '), url: String(run.html_url || ''), since: previous?.failing ? previous.since : String(run.updated_at || run.created_at || new Date().toISOString()), actor: previous?.failing ? previous.actor : actorOf(run) };
+        if (JSON.stringify(next) !== JSON.stringify(previous)) { state.ciStatus![key] = next; changed = true; }
+        if (previous && !previous.failing) broadcast('overlay', { type: 'spike-planted', payload: { login: next.actor || repo, repo, branch, workflow: next.workflow } });
+      } else {
+        const fixer = actorOf([...latest.values()][0]);
+        if (previous?.failing) broadcast('overlay', { type: 'spike-defused', payload: { login: fixer || repo, repo, branch, since: previous.since } });
+        if (!previous || previous.failing) { state.ciStatus![key] = { repo, branch, failing: false, workflow: '', url: '', since: new Date().toISOString() }; changed = true; }
+      }
+    }
+  }
+  if (changed) { persistState(); broadcast('state', getClientState()); }
+}
+
+/** Distinct UTC days this month on which each player earned XP. */
+function activeDaysThisMonth(): Record<string, number> {
+  const days: Record<string, Set<string>> = {};
+  const add = (login: string, time: string) => { if (time >= state.monthStartDate) (days[login] ||= new Set()).add(time.slice(0, 10)); };
+  for (const entry of Object.values(state.scoreLedger || {})) for (const item of Object.values(entry.awards)) if (item.amount > 0) add(item.login, item.time);
+  for (const item of state.feed) if (item.xp > 0) add(item.user, item.time);
+  return Object.fromEntries(Object.entries(days).map(([login, set]) => [login, set.size]));
+}
+
 function getClientState() {
   return {
     members: state.members,
@@ -1774,6 +1842,8 @@ function getClientState() {
     shamePRs: state.shamePRs,
     monthStartDate: state.monthStartDate,
     lastSeason: state.lastSeason || null,
+    ciAlerts: Object.values(state.ciStatus || {}).filter(item => item.failing),
+    activeDays: activeDaysThisMonth(),
     xpConfig,
   };
 }
@@ -2019,6 +2089,8 @@ app.listen(PORT, '0.0.0.0', () => {
   // Initial full sync then start polling
   fullSync().then(() => {
     rescorePromotionPrs().catch(err => console.warn('[server] Promotion PR rescore failed:', err));
+    pollCi().catch(err => console.warn('[server] CI poll failed:', err));
+    setInterval(() => pollCi().catch(err => console.warn('[server] CI poll failed:', err)), 3 * 60_000);
     setInterval(() => rescorePromotionPrs().catch(() => {}), 60 * 60_000);
     pollEvents();
     setInterval(pollEvents, xpConfig.pollIntervalSeconds * 1000);

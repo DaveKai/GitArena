@@ -135,3 +135,38 @@
 .audio-blocked { position: fixed; z-index: 65; left: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: #fff; background: rgba(216,37,77,.92); box-shadow: 0 0 28px rgba(232,38,78,.5); animation: x-throb 1.6s ease-in-out infinite; }
 .audio-blocked span { display: grid; gap: 4px; font: 500 14px/1.2 'Geist', sans-serif; }
 .audio-blocked strong { font: 800 13px/1 var(--x-mono); letter-spacing: .14em; }
+
+/* CI spike */
+.spike-chip { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 7px 9px; color: #ff8fa3; background: #2a0a12; border: 1px solid #ff4d6d; font: 800 13px/1 var(--x-mono); letter-spacing: .14em; box-shadow: 0 0 20px rgba(255,77,109,.45); animation: x-throb 1.1s ease-in-out infinite; }
+.tk-kicker--red { color: #ff6b86; }
+.tk-spike { position: absolute; inset: 0; display: grid; grid-template-columns: 560px minmax(0, 1fr); align-items: center; gap: 70px; padding: 0 110px; background: radial-gradient(ellipse 50% 60% at 25% 50%, rgba(232,38,78,.28), transparent 70%); }
+.tk-spike-icon { display: grid; place-items: center; filter: drop-shadow(0 0 40px rgba(255,77,109,.7)); }
+.tk-spike h1 { margin: 6px 0 16px !important; font: 800 120px/.85 var(--x-display); text-transform: uppercase; color: #ff4d6d; }
+.tk-pr--red { border-color: rgba(255,77,109,.5); border-left: 6px solid #ff4d6d; }
+.tk-pr--red b { color: #ff4d6d; }
+.as-moment--spike-planted .as-moment-band { background: linear-gradient(90deg, #5a0a1c, #e8264e, #ff4d6d); box-shadow: 0 0 90px rgba(232,38,78,.8); }
+.as-moment--spike-defused .as-moment-band { background: linear-gradient(90deg, #0b5563, #1fb6c9, #7ff0ff); color: #032a30; box-shadow: 0 0 90px rgba(31,182,201,.7); }
+.as-moment--spike-defused .as-moment-inner span, .as-moment--spike-defused .as-moment-inner small { color: #05363d; }
+
+/* Tab scoreboard */
+.tk-board { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 40px 90px 34px; }
+.tk-board-head h1 { margin: 6px 0 18px !important; font: 800 84px/.85 var(--x-display); text-transform: uppercase; }
+.tk-table { flex: 1; min-height: 0; display: grid; gap: 4px; }
+.tk-row { display: grid; grid-template-columns: 92px minmax(0, 2.4fr) repeat(6, minmax(0, 1fr)) 150px; align-items: center; gap: 12px; padding: 0 18px; background: color-mix(in srgb, var(--x-panel) 88%, transparent); border-left: 5px solid var(--x-edge); min-height: 0; }
+.tk-row--head { padding-top: 0; padding-bottom: 8px; background: none; border-left-color: transparent; color: var(--x-muted); font: 700 13px/1 var(--x-mono); letter-spacing: .16em; text-transform: uppercase; }
+.tk-row--head span:nth-child(n+3) { text-align: right; }
+.tk-rank { display: flex; align-items: center; gap: 10px; }
+.tk-rank b { font: 800 30px/1 var(--x-display); }
+.tk-player { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.tk-player .arena-avatar { width: 38px; height: 38px; font-size: 14px; }
+.tk-player strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 30px/1 var(--x-display); text-transform: uppercase; }
+.tk-player small { color: var(--x-muted); font: 700 11px/1 var(--x-mono); letter-spacing: .14em; }
+.tk-hot { color: #ff7a2e; filter: drop-shadow(0 0 6px rgba(255,110,40,.8)); flex: none; }
+.tk-num { text-align: right; font: 600 24px/1 var(--x-mono); letter-spacing: -.03em; color: #dcdcea; }
+.tk-num.is-best { color: var(--x-accent-hi); text-shadow: 0 0 14px color-mix(in srgb, var(--x-accent) 70%, transparent); font-weight: 800; }
+.tk-last { text-align: right; color: var(--x-muted); font: 600 14px/1 var(--x-mono); letter-spacing: .06em; }
+.tk-row--unranked { opacity: .45; }
+.tk-row--radiant { border-left-color: #f5dc72; } .tk-row--immortal { border-left-color: #e8264e; } .tk-row--ascendant { border-left-color: #2fd57f; }
+.tk-row--diamond { border-left-color: #c77dff; } .tk-row--platinum { border-left-color: #3cc6d4; } .tk-row--gold { border-left-color: #e8b93a; }
+.tk-row--silver { border-left-color: #b9c3cc; } .tk-row--bronze { border-left-color: #c98a55; } .tk-row--iron { border-left-color: #8d9199; }
+@media (max-height: 950px) { .tk-board { padding: 22px 60px 22px; } .tk-board-head h1 { font-size: 56px; margin-bottom: 10px !important; } .tk-player strong { font-size: 22px; } .tk-num { font-size: 18px; } .tk-rank b { font-size: 22px; } .tk-player .arena-avatar { width: 28px; height: 28px; } .tk-spike { grid-template-columns: 380px minmax(0, 1fr); } .tk-spike h1 { font-size: 84px; } }

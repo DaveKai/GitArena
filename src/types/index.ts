@@ -70,3 +70,13 @@ export interface SeasonRecap {
   teamXp: number;
   standings: Array<{ login: string; xp: number; commits: number; merges: number; reviews: number; streak: number }>;
 }
+
+export interface CiAlert {
+  repo: string;
+  branch: string;
+  failing: boolean;
+  workflow: string;
+  url: string;
+  since: string;
+  actor?: string;
+}

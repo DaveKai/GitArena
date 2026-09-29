@@ -106,6 +106,8 @@ export function playEventSound(type: string) {
     case 'ace': sfxAce(); break;
     case 'interstitial': sfxRoundStart(); break;
     case 'spike': sfxSpike(); break;
+    case 'spike-planted': sfxSpike(); break;
+    case 'spike-defused': sfxDefuse(); break;
     default: sfxXp();
   }
 }
@@ -299,4 +301,11 @@ export function sfxSpike() {
   let t = 0, gap = 420;
   for (let i = 0; i < 7; i++) { setTimeout(() => playTone(1760, 0.07, 'square', 0.04), t); t += gap; gap *= 0.72; }
   setTimeout(() => playTone(2349, 0.25, 'sine', 0.06), t + 60);
+}
+
+/** Defuse: a descending disarm trill, then a relieved chime. */
+export function sfxDefuse() {
+  if (playClip('spike-defused')) return;
+  [1760, 1568, 1397, 1175].forEach((f, i) => setTimeout(() => playTone(f, 0.06, 'square', 0.035), i * 55));
+  setTimeout(() => { playTone(784, 0.5, 'sine', 0.1); playTone(1175, 0.5, 'sine', 0.06); }, 300);
 }

@@ -240,6 +240,9 @@ button:focus-visible { outline: 2px solid #dcfa6b; outline-offset: 3px; }
 .standing-row.standing-row--bronze .standing-rank { color: #c98a55; }
 .rank-tier--iron { color: #8d9199; background: rgba(141,145,153,.1); }
 .standing-row.standing-row--iron .standing-rank { color: #8d9199; }
+/* Distance to the player above, in the Broadcast rows */
+.standing-gap { color: #9fb0a8; font: 600 11px/1 'Geist Mono Variable', monospace; letter-spacing: .08em; white-space: nowrap; }
+.standing-row--leader .standing-gap { color: var(--acid); }
 /* Display style switch (shared by both views) */
 .ui-root { --acid: #dcfa6b; position: relative; background: #080e10; min-height: 100vh; overflow: hidden; }
 .ui-switch { position: relative; flex: none; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); }

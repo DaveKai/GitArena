@@ -73,3 +73,13 @@ export function RankTierChip({ rank, xp = 1, size = 20 }: { rank: number; xp?: n
   const tier = tierForRank(rank, xp);
   return tier ? <span className={`rank-tier rank-tier--${tier}`}><RankEmblem tier={tier} size={size}/>{tier.toUpperCase()}</span> : null;
 }
+
+/** "+2,640 XP LEAD" for #1, otherwise what it takes to pass the player above. */
+export function rankGap(ranked: Member[], stats: Record<string, DevStats>, rank: number): string {
+  const xpOf = (i: number) => stats[ranked[i]?.login]?.monthlyXp || 0;
+  if (!ranked[rank]) return '';
+  if (rank === 0) return ranked[1] ? `+${number(xpOf(0) - xpOf(1))} XP LEAD` : '';
+  const need = xpOf(rank - 1) - xpOf(rank) + 1;
+  const target = tierForRank(rank - 1, xpOf(rank - 1));
+  return target && target !== tierForRank(rank, xpOf(rank)) ? `${number(need)} XP TO ${target.toUpperCase()}` : `${number(need)} XP TO #${rank}`;
+}
