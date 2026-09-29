@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useStore } from './store/useStore';
 import { useBackendSync } from './hooks/useBackendSync';
@@ -8,35 +7,12 @@ import { ArenaIcon, type IconName } from './components/ui/ArenaIcon';
 import { getBadgeDef } from './lib/badges';
 import { playEventSound, setSoundEnabled, unlockAudio } from './lib/sounds';
 import type { DevStats, FeedItem, Member, ShamePR } from './types';
+import { AnimatedScore, Avatar, UiSwitch, elapsed, eventIcons, initials, number, type UiMode } from './components/shared';
+import { ArenaSelectView } from './components/arena/ArenaSelectView';
 
 const featureNames = ['MVP', 'HEAD TO HEAD', 'STREAKS', 'AWARDS', 'BY THE NUMBERS', 'REVIEW QUEUE', 'MOMENTUM', 'TROPHY WALL'];
 const featureIcons: IconName[] = ['trophy', 'bolt', 'flame', 'medal', 'chart', 'review', 'chart', 'star'];
-const eventIcons: Record<FeedItem['type'], IconName> = { commit: 'git', 'branch-push': 'git', 'pr-opened': 'branch', 'pr-merged': 'merge', review: 'review', issue: 'check', 'issue-opened': 'issue', badge: 'medal', streak: 'flame', 'level-up': 'spark' };
-const number = (value: number) => value.toLocaleString();
-const initials = (name: string) => name.split(/\s+/).map(part => part[0] || '').join('').slice(0, 2).toUpperCase();
-function elapsed(time: string, now: number) { const minutes = Math.max(0, Math.floor((now - new Date(time).getTime()) / 60000)); if (!Number.isFinite(minutes)) return ''; if (minutes < 1) return 'JUST NOW'; if (minutes < 60) return `${minutes} MIN AGO`; const hours = Math.floor(minutes / 60); return hours < 24 ? `${hours} HR AGO` : `${Math.floor(hours / 24)} D AGO`; }
-
-function Avatar({ member, large = false }: { member?: Member; large?: boolean }) {
-  const name = member?.name || member?.login || 'Developer';
-  return <div className={`arena-avatar ${large ? 'arena-avatar--large' : ''}`} style={{ '--avatar-color': member?.color || '#87bce9' } as CSSProperties}>{member?.avatarUrl ? <img src={member.avatarUrl} alt="" /> : <span>{initials(name)}</span>}</div>;
-}
-
-function AnimatedScore({ xp }: { xp: number }) {
-  const previous = useRef(xp);
-  const [gain, setGain] = useState(0);
-  useEffect(() => {
-    if (previous.current > 0 && xp > previous.current) {
-      setGain(xp - previous.current);
-      const id = setTimeout(() => setGain(0), 1700);
-      previous.current = xp;
-      return () => clearTimeout(id);
-    }
-    previous.current = xp;
-  }, [xp]);
-  return <div className="standing-score"><motion.strong key={xp} initial={{ opacity: 0.5, y: 8, scale: 1.07 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.35 }}>{number(xp)}</motion.strong><span>XP</span><AnimatePresence>{gain > 0 && <motion.b className="score-gain" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: -15 }} exit={{ opacity: 0, y: -31 }} transition={{ duration: .55 }}>+{number(gain)}</motion.b>}</AnimatePresence></div>;
-}
-
-function Header({ isDemo, memberCount, now, periodStart, soundOn, onSound, onExpand }: { isDemo: boolean; memberCount: number; now: number; periodStart: string; soundOn: boolean; onSound: () => void; onExpand: () => void }) {
+function Header({ isDemo, memberCount, now, periodStart, soundOn, onSound, onExpand, uiMode, onUiMode }: { isDemo: boolean; memberCount: number; now: number; periodStart: string; soundOn: boolean; onSound: () => void; onExpand: () => void; uiMode: UiMode; onUiMode: (mode: UiMode) => void }) {
   const date = new Date(now);
   const period = new Date(`${periodStart}T00:00:00Z`);
   return <header className="arena-header">
@@ -44,6 +20,7 @@ function Header({ isDemo, memberCount, now, periodStart, soundOn, onSound, onExp
     <div className="season-label"><span className="eyebrow">THE BUILD SEASON</span><strong>{period.toLocaleString('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase()}</strong></div><div className="header-spacer" />
     <div className="broadcast-status"><span className="live-indicator" />{isDemo ? 'DEMO BROADCAST' : 'LIVE BROADCAST'}</div>
     <div className="header-team"><ArenaIcon name="users" size={18} /> {memberCount} BUILDERS</div><div className="header-clock" title="Mac system time (UTC)">{date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })} UTC</div>
+    <UiSwitch mode={uiMode} onChange={onUiMode}/>
     <button className="icon-button" onClick={onSound} title={soundOn ? 'Mute sound' : 'Enable sound'} aria-label={soundOn ? 'Mute sound' : 'Enable sound'}><ArenaIcon name={soundOn ? 'volume' : 'mute'} size={20} /></button>
     <button className="icon-button" onClick={onExpand} title="Fullscreen" aria-label="Fullscreen"><ArenaIcon name="expand" size={19} /></button>
   </header>;
@@ -165,7 +142,15 @@ export default function App() {
   useBackendSync(); useDemoMode();
   const members = useStore(s => s.members), stats = useStore(s => s.stats), feed = useStore(s => s.feed), bossProgress = useStore(s => s.bossProgress), bossIndex = useStore(s => s.bossIndex), bossGoals = useStore(s => s.bossGoals), shamePRs = useStore(s => s.shamePRs), isDemo = useStore(s => s.isDemo), periodStart = useStore(s => s.monthStartDate), overlay = useStore(s => s.overlayQueue[0]), popOverlay = useStore(s => s.popOverlay), nextSpotlight = useStore(s => s.nextSpotlight), checkMonthlyReset = useStore(s => s.checkMonthlyReset);
   const [now, setNow] = useState(Date.now());
-  const [soundChoice, setSoundChoice] = useState<boolean | null>(() => { const value = localStorage.getItem('gitarena-sound'); return value === 'on' ? true : value === 'off' ? false : null; });
+  const [soundChoice, setSoundChoice] = useState<boolean | null>(() => { const param = new URLSearchParams(window.location.search).get('sound'); if (param === 'on' || param === 'off') return param === 'on'; let value: string | null = null; try { value = localStorage.getItem('gitarena-sound'); } catch { /* storage unavailable */ } return value === 'on' ? true : value === 'off' ? false : null; });
+  const [uiMode, setUiMode] = useState<UiMode>(() => {
+    const param = new URLSearchParams(window.location.search).get('ui');
+    if (param === 'arena' || param === 'broadcast') return param;
+    try { return localStorage.getItem('gitarena-ui') === 'arena' ? 'arena' : 'broadcast'; } catch { return 'broadcast'; }
+  });
+  const reduced = useReducedMotion();
+  const [wipe, setWipe] = useState(0);
+  const changeUi = (mode: UiMode) => { if (mode !== uiMode) setWipe(n => n + 1); setUiMode(mode); try { localStorage.setItem('gitarena-ui', mode); } catch { /* storage unavailable */ } };
   const previousFeedId = useRef<string | null>(null), previousOverlay = useRef<string | null>(null);
   const complete = bossGoals.length > 0 && bossIndex >= bossGoals.length;
   const goal = complete ? { label: 'ALL GOALS COMPLETE', metric: 'complete', target: 1 } : bossGoals[bossIndex] || { label: 'NO OBJECTIVE SET', metric: 'none', target: 1 };
@@ -176,7 +161,16 @@ export default function App() {
   useEffect(() => { setSoundEnabled(soundChoice === true); }, [soundChoice]);
   useEffect(() => { const latest = feed[0]; if (!latest) return; if (previousFeedId.current && previousFeedId.current !== latest.id) playEventSound(latest.type); previousFeedId.current = latest.id; }, [feed]);
   useEffect(() => { if (!overlay) { previousOverlay.current = null; return; } const key = `${overlay.type}-${JSON.stringify(overlay.payload)}`; if (previousOverlay.current !== key) { playEventSound(overlay.type); previousOverlay.current = key; } }, [overlay]);
-  const chooseSound = (enabled: boolean) => { if (enabled) unlockAudio(); setSoundEnabled(enabled); setSoundChoice(enabled); localStorage.setItem('gitarena-sound', enabled ? 'on' : 'off'); };
+  const chooseSound = (enabled: boolean) => { if (enabled) unlockAudio(); setSoundEnabled(enabled); setSoundChoice(enabled); try { localStorage.setItem('gitarena-sound', enabled ? 'on' : 'off'); } catch { /* storage unavailable */ } };
   const expand = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.().catch(() => {}); };
-  return <div className="arena-shell"><Header isDemo={isDemo} memberCount={members.length} now={now} periodStart={periodStart} soundOn={soundChoice === true} onSound={() => chooseSound(!soundChoice)} onExpand={expand}/><main className="arena-main"><Standings members={members} stats={stats}/><div className="arena-right"><Mission progress={complete ? 1 : bossProgress[goal.metric] || 0} goal={goal} teamXp={teamXp} complete={complete}/><Activity feed={feed} members={members} now={now}/></div></main><FeatureStage members={members} stats={stats} feed={feed} shamePRs={shamePRs}/><footer className="arena-footer"><span>GITARENA <b>/</b> BUILD TOGETHER. WIN TOGETHER.</span><span>EVERY COMMIT WRITES THE STORY <ArenaIcon name="arrow" size={15}/></span></footer><AnimatePresence>{overlay && <Celebration key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence>{soundChoice === null && <SoundPrompt onChoice={chooseSound}/>}</div>;
+  const soundOn = soundChoice === true, toggleSound = () => chooseSound(!soundChoice);
+  return <div className={`ui-root ui-root--${uiMode}`}>
+    <AnimatePresence mode="wait" initial={false}>
+      {uiMode === 'arena'
+        ? <motion.div key="arena" className="ui-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0.1 : 0.35 }}><ArenaSelectView now={now} soundOn={soundOn} onSound={toggleSound} uiMode={uiMode} onUiMode={changeUi}/></motion.div>
+        : <motion.div key="broadcast" className="ui-view arena-shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0.1 : 0.35 }}><Header isDemo={isDemo} memberCount={members.length} now={now} periodStart={periodStart} soundOn={soundOn} onSound={toggleSound} onExpand={expand} uiMode={uiMode} onUiMode={changeUi}/><main className="arena-main"><Standings members={members} stats={stats}/><div className="arena-right"><Mission progress={complete ? 1 : bossProgress[goal.metric] || 0} goal={goal} teamXp={teamXp} complete={complete}/><Activity feed={feed} members={members} now={now}/></div></main><FeatureStage members={members} stats={stats} feed={feed} shamePRs={shamePRs}/><footer className="arena-footer"><span>GITARENA <b>/</b> BUILD TOGETHER. WIN TOGETHER.</span><span>EVERY COMMIT WRITES THE STORY <ArenaIcon name="arrow" size={15}/></span></footer><AnimatePresence>{overlay && <Celebration key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence></motion.div>}
+    </AnimatePresence>
+    {!reduced && wipe > 0 && <motion.div key={wipe} className="ui-wipe" initial={{ x: '-120%' }} animate={{ x: '120%' }} transition={{ duration: 0.9, ease: [0.7, 0, 0.3, 1] }} aria-hidden="true"/>}
+    {soundChoice === null && <SoundPrompt onChoice={chooseSound}/>}
+  </div>;
 }

@@ -210,6 +210,25 @@ button:focus-visible { outline: 2px solid #dcfa6b; outline-offset: 3px; }
 @keyframes event-glint { 50% { box-shadow: 0 0 0 4px rgba(220,250,107,.08), 0 0 24px rgba(220,250,107,.2); } }
 @keyframes victory-icon { 50% { transform: translateY(-7px) rotate(-5deg); } }
 
+/* Arena-styled first-run sound prompt */
+.ui-root--arena .sound-prompt-backdrop { background: rgba(12,12,26,.82); }
+.ui-root--arena .sound-prompt { border-color: #5a4fc4; background: linear-gradient(145deg, #262257, #15162a); }
+.ui-root--arena .sound-prompt::before { background: #6c5cf0; }
+.ui-root--arena .sound-prompt-mark, .ui-root--arena .sound-prompt h2 em { color: #9a8fff; }
+.ui-root--arena .sound-prompt p { color: #c3c0e6; }
+.ui-root--arena .sound-prompt-actions button { border-color: #6c5cf0; }
+.ui-root--arena .primary-action { color: #fff; background: #6c5cf0; }
+.ui-root--arena .secondary-action { color: #e6e3ff; background: #2a2a48; }
+/* Display style switch (shared by both views) */
+.ui-root { --acid: #dcfa6b; position: relative; min-height: 100vh; overflow: hidden; }
+.ui-switch { position: relative; flex: none; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); }
+.ui-switch button { position: relative; z-index: 1; padding: 8px 12px; color: #9aa4a0; background: none; border: 0; font: 700 11px/1 'Geist Mono Variable', monospace; letter-spacing: .14em; transition: color .3s; }
+.ui-switch button.active { color: #fff; }
+.ui-switch-thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: #6c5cf0; box-shadow: 0 0 16px rgba(108,92,240,.55); }
+.ui-switch--arena .ui-switch-thumb { left: 50%; }
+.ui-root--broadcast .ui-switch-thumb { background: var(--acid, #dcfa6b); box-shadow: 0 0 14px rgba(220,250,107,.35); }
+.ui-root--broadcast .ui-switch button.active { color: #081012; }
+.ui-wipe { position: fixed; z-index: 60; top: -10%; bottom: -10%; left: 0; width: 70%; pointer-events: none; background: linear-gradient(90deg, transparent, #6c5cf0 25%, #9a8fff 50%, #6c5cf0 75%, transparent); transform: skewX(-18deg); opacity: .92; }
 @media (max-width: 1450px) { .arena-shell { grid-template-rows: 51px minmax(0,1fr) 235px 22px; padding: 14px; gap: 9px; } .arena-header { gap: 12px; } .standing-row { gap: 11px; padding: 0 13px; } .standing-name-line strong { font-size: 18px; } .standing-row--leader .standing-name-line strong { font-size: 23px; } .standing-score strong { font-size: 23px; } .standing-row--leader .standing-score strong { font-size: 33px; } .leader-flag { display: none; } .arena-right { grid-template-rows: 178px minmax(0,1fr); gap: 9px; } .mission-panel { padding: 16px 19px; } .feature-stage { grid-template-columns: 190px minmax(0,1fr); } .feature-content { padding: 20px 25px; gap: 25px; } .feature-intro { width: 220px; } .feature-hero-avatar .arena-avatar { width: 100px; height: 100px; } .feature-stat-stack .feature-metric { width: 105px; padding: 0 7px; } .feature-stat-stack .feature-metric strong { font-size: 24px; } }
 @media (max-height: 1000px) and (min-width: 1051px) { .arena-shell { grid-template-rows: 48px minmax(0,1fr) 190px 18px; padding: 10px 14px; gap: 7px; } .panel-heading { padding: 12px 18px; } .panel-heading h1 { font-size: 28px; } .roster-section { height: 84px; } .roster-heading { height: 23px; } .roster-rail { height: 61px; padding-bottom: 5px; } .roster-card { flex-basis: 157px; } .roster-card .arena-avatar { width: 27px; height: 27px; } .standings-foot { height: 23px; } .arena-right { grid-template-rows: 151px minmax(0,1fr); gap: 7px; } .mission-panel { padding: 11px 17px; } .mission-center { margin: 9px 0 10px; } .mission-center h2 { font-size: 27px; } .mission-percent { font-size: 49px; } .activity-heading { padding: 12px 17px; } .activity-heading h2 { font-size: 25px; } .feature-content { padding: 13px 22px; } .feature-hero-avatar .arena-avatar { width: 80px; height: 80px; } .feature-main h3 { font-size: 44px; } .streak-grid > div, .award-grid > div, .review-grid > div { height: 135px; padding: 10px; } .feature-intro h3 { font-size: 28px; } .feature-nav { padding: 12px; gap: 6px; } .feature-option { padding: 3px 5px; } }
 @media (max-height: 850px) and (min-width: 1051px) { .standing-subline { display: none; } .standing-row .arena-avatar { width: 38px; height: 38px; } .standing-row--leader .arena-avatar { width: 47px; height: 47px; } .standing-row--leader .standing-name-line strong { font-size: 25px; } .standing-row--leader .standing-score strong { font-size: 35px; } }

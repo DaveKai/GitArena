@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type IconName = 'arena' | 'git' | 'merge' | 'review' | 'issue' | 'trophy' | 'flame' | 'target' | 'chart' | 'volume' | 'mute' | 'medal' | 'clock' | 'users' | 'spark' | 'arrow' | 'shield' | 'check' | 'branch' | 'star' | 'alert' | 'expand' | 'code' | 'bolt';
+export type IconName = 'arena' | 'git' | 'merge' | 'review' | 'issue' | 'trophy' | 'flame' | 'target' | 'chart' | 'volume' | 'mute' | 'medal' | 'clock' | 'users' | 'spark' | 'arrow' | 'shield' | 'check' | 'branch' | 'star' | 'alert' | 'expand' | 'code' | 'bolt' | 'lock' | 'hex' | 'layers';
 
 const paths: Record<IconName, ReactNode> = {
   arena: <><path d="M4 19 12 3l8 16H4Z"/><path d="m8 15 4-8 4 8H8Z"/><path d="M3 21h18"/></>,
@@ -27,6 +27,9 @@ const paths: Record<IconName, ReactNode> = {
   expand: <><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></>,
   code: <><path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-16-2 20"/></>,
   bolt: <><path d="m13 2-9 11h7l-1 9 10-12h-7l0-8Z"/></>,
+  lock: <><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3m-4 4v2"/></>,
+  hex: <><path d="m12 2 8.7 5v10L12 22l-8.7-5V7L12 2Z"/></>,
+  layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></>,
 };
 
 export function ArenaIcon({ name, size = 22, className = '' }: { name: IconName; size?: number; className?: string }) {
