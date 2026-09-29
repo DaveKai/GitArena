@@ -1,16 +1,44 @@
 // Web Audio API synthesized sound effects — no external files needed.
 
 let ctx: AudioContext | null = null;
-const MASTER_VOLUME = 0.4;
+let input: AudioNode | null = null;
+// Loud enough for a TV across a room; a compressor keeps stacked cues from clipping.
+// Override with ?volume=0.5 (quieter) up to ?volume=3 (louder).
+const volumeParam = Number(new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('volume'));
+const MASTER_VOLUME = Number.isFinite(volumeParam) && volumeParam > 0 ? Math.min(3, volumeParam) : 1;
+const TONE_BOOST = 3.2;
 let enabled = false;
+const listeners = new Set<() => void>();
 
-export function setSoundEnabled(value: boolean) { enabled = value; }
-export function unlockAudio() { try { getCtx().resume().catch(() => {}); } catch { /* audio unsupported */ } }
+export function setSoundEnabled(value: boolean) {
+  enabled = value;
+  // Create the context up front so a browser block is visible straight away.
+  if (value) { try { getCtx(); } catch { /* audio unsupported */ } }
+  listeners.forEach(fn => fn());
+}
+
+/** Resume audio; must run inside a user gesture (click, key, touch) to satisfy autoplay rules. */
+export function unlockAudio() { try { getCtx().resume().then(() => listeners.forEach(fn => fn())).catch(() => {}); } catch { /* audio unsupported */ } }
+
+/** True when sound is switched on but the browser is holding audio until someone interacts with the page. */
+export function isAudioBlocked() { return enabled && !!ctx && ctx.state !== 'running'; }
+export function onAudioState(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; }
 
 function getCtx(): AudioContext {
-  if (!ctx) ctx = new AudioContext();
+  if (!ctx) {
+    ctx = new AudioContext();
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -14; compressor.knee.value = 10; compressor.ratio.value = 6;
+    compressor.attack.value = 0.003; compressor.release.value = 0.2;
+    const master = ctx.createGain();
+    master.gain.value = MASTER_VOLUME;
+    compressor.connect(master).connect(ctx.destination);
+    input = compressor;
+    ctx.onstatechange = () => listeners.forEach(fn => fn());
+  }
   return ctx;
 }
+const out = (c: AudioContext) => input || c.destination;
 
 function playTone(freq: number, duration: number, type: OscillatorType = 'sine', vol = 0.15, detune = 0) {
   if (!enabled) return;
@@ -22,9 +50,9 @@ function playTone(freq: number, duration: number, type: OscillatorType = 'sine',
   osc.type = type;
   osc.frequency.value = freq;
   osc.detune.value = detune;
-  gain.gain.setValueAtTime(vol * MASTER_VOLUME, c.currentTime);
+  gain.gain.setValueAtTime(vol * TONE_BOOST, c.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration);
-  osc.connect(gain).connect(c.destination);
+  osc.connect(gain).connect(out(c));
   osc.start(c.currentTime);
   osc.stop(c.currentTime + duration);
 }
@@ -189,9 +217,9 @@ function playNoise(duration: number, vol: number, from: number, to: number) {
   src.buffer = buffer; filter.type = 'bandpass'; filter.Q.value = 1.2;
   filter.frequency.setValueAtTime(from, c.currentTime);
   filter.frequency.exponentialRampToValueAtTime(to, c.currentTime + duration);
-  gain.gain.setValueAtTime(vol * MASTER_VOLUME, c.currentTime);
+  gain.gain.setValueAtTime(vol * TONE_BOOST, c.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration);
-  src.connect(filter).connect(gain).connect(c.destination);
+  src.connect(filter).connect(gain).connect(out(c));
   src.start();
 }
 

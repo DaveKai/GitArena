@@ -130,3 +130,8 @@
   .quiet-clock { font-size: 150px; }
 }
 @media (max-width: 1050px) { .kill-feed { width: calc(100% - 32px); right: 16px; } .tk-side-copy h2 { font-size: 60px; } .tk-play { padding: 0 24px; } .tk-play h1 { font-size: 90px; } .tk-radar { grid-template-columns: 1fr; padding: 24px; } .tk-scope { display: none; } .tk-podium { grid-template-columns: repeat(3, 1fr); gap: 10px; } .tk-awards { grid-template-columns: repeat(2, 1fr); } }
+
+/* Audio blocked by autoplay policy */
+.audio-blocked { position: fixed; z-index: 65; left: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: #fff; background: rgba(216,37,77,.92); box-shadow: 0 0 28px rgba(232,38,78,.5); animation: x-throb 1.6s ease-in-out infinite; }
+.audio-blocked span { display: grid; gap: 4px; font: 500 14px/1.2 'Geist', sans-serif; }
+.audio-blocked strong { font: 800 13px/1 var(--x-mono); letter-spacing: .14em; }

@@ -5,7 +5,7 @@ import { useBackendSync } from './hooks/useBackendSync';
 import { useDemoMode } from './hooks/useDemoMode';
 import { ArenaIcon, type IconName } from './components/ui/ArenaIcon';
 import { getBadgeDef } from './lib/badges';
-import { playEventSound, setSoundEnabled, sfxKill, unlockAudio } from './lib/sounds';
+import { isAudioBlocked, onAudioState, playEventSound, setSoundEnabled, sfxKill, sfxRoundStart, unlockAudio } from './lib/sounds';
 import type { DevStats, FeedItem, Member, ShamePR } from './types';
 import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, tierForRank, elapsed, eventIcons, initials, number, type UiMode } from './components/shared';
 import { ArenaSelectView } from './components/arena/ArenaSelectView';
@@ -165,9 +165,23 @@ export default function App() {
   useEffect(() => { if (!isDemo) return; const id = setInterval(checkMonthlyReset, 60000); return () => clearInterval(id); }, [isDemo, checkMonthlyReset]);
   useEffect(() => { const id = setInterval(nextSpotlight, 12000); return () => clearInterval(id); }, [nextSpotlight]);
   useEffect(() => { setSoundEnabled(soundChoice === true); }, [soundChoice]);
+  // Browsers hold audio until someone interacts with the page (e.g. after the TV reloads).
+  // Any click, key or touch unlocks it; until then a notice says so on screen.
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  useEffect(() => {
+    const sync = () => setAudioBlocked(isAudioBlocked());
+    const off = onAudioState(sync);
+    const id = setInterval(sync, 3000);
+    sync();
+    if (soundChoice !== true) return () => { off(); clearInterval(id); };
+    const unlock = () => unlockAudio();
+    const events = ['pointerdown', 'keydown', 'touchstart'] as const;
+    events.forEach(e => window.addEventListener(e, unlock, { passive: true }));
+    return () => { off(); clearInterval(id); events.forEach(e => window.removeEventListener(e, unlock)); };
+  }, [soundChoice]);
   useEffect(() => { const latest = feed[0]; if (!latest) return; if (previousFeedId.current && previousFeedId.current !== latest.id && !quietRef.current) { if (latest.xp > 0) sfxKill(feed.filter(f => f.user === latest.user && f.xp > 0 && Date.parse(latest.time) - Date.parse(f.time) < 3 * 60000 && Date.parse(f.time) <= Date.parse(latest.time)).length); else playEventSound(latest.type); } previousFeedId.current = latest.id; }, [feed]);
   useEffect(() => { if (!overlay) { previousOverlay.current = null; return; } const key = `${overlay.type}-${JSON.stringify(overlay.payload)}`; if (previousOverlay.current !== key) { if (!quietRef.current) playEventSound(overlay.type); previousOverlay.current = key; } }, [overlay]);
-  const chooseSound = (enabled: boolean) => { if (enabled) unlockAudio(); setSoundEnabled(enabled); setSoundChoice(enabled); try { localStorage.setItem('gitarena-sound', enabled ? 'on' : 'off'); } catch { /* storage unavailable */ } };
+  const chooseSound = (enabled: boolean) => { if (enabled) { unlockAudio(); setSoundEnabled(enabled); setTimeout(sfxRoundStart, 120); } else setSoundEnabled(enabled); setSoundChoice(enabled); try { localStorage.setItem('gitarena-sound', enabled ? 'on' : 'off'); } catch { /* storage unavailable */ } };
   const expand = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.().catch(() => {}); };
   const soundOn = soundChoice === true, toggleSound = () => chooseSound(!soundChoice);
   return <div className={`ui-root ui-root--${uiMode}`}>
@@ -178,6 +192,7 @@ export default function App() {
     <KillFeed lines={killLines} members={members}/>
     <Takeovers blocked={!!overlay || quiet}/>
     <AnimatePresence>{quiet && <QuietScreen now={now} until={quietUntil}/>}</AnimatePresence>
+    {soundOn && audioBlocked && <div className="audio-blocked" role="status"><ArenaIcon name="mute" size={20}/><span><strong>SOUND IS BLOCKED BY THE BROWSER</strong>Click or press any key on this screen once to turn it on.</span></div>}
     {soundChoice === null && <SoundPrompt onChoice={chooseSound}/>}
   </div>;
 }
