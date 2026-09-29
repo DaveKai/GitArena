@@ -262,3 +262,36 @@
 .as-card-foot .on-fire { margin-bottom: 8px; }
 .as-mini-fire { position: absolute; top: 10px; left: 12px; display: grid; place-items: center; width: 28px; height: 28px; color: #1c0a00; background: linear-gradient(135deg, #ffb13b, #ff5a1f); border-radius: 50%; box-shadow: 0 0 14px rgba(255,110,40,.6); }
 .as-card--radiant.is-leader { border-color: var(--tier); }
+
+/* Card layout v2: a top row (rank + emblem) and one bottom nameplate. Nothing floats over the art. */
+:where(.as-card) { --tier: #9a8fff; --tier-rgb: 154,143,255; }
+.as-card-top { position: absolute; z-index: 2; top: 16px; left: 20px; right: 16px; display: flex; align-items: flex-start; justify-content: space-between; }
+.as-card-top .as-card-rank { position: static; }
+.as-card-top .rank-emblem { filter: drop-shadow(0 3px 10px rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(var(--tier-rgb),.5)); }
+.as-card--radiant .as-card-top .rank-emblem { animation: as-radiant 3.2s ease-in-out infinite; }
+.as-rankup { right: auto; left: 50%; top: 22px; translate: -50% 0; }
+.as-plate { position: absolute; z-index: 2; left: 8px; right: 8px; bottom: 8px; padding: 0 14px 12px; display: grid; justify-items: center; gap: 4px; }
+.as-plate-line { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 22px; font: 700 12px/1 var(--as-mono); letter-spacing: .16em; text-transform: uppercase; color: #cfcde6; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+.as-plate-line i { width: 4px; height: 4px; background: currentColor; opacity: .6; transform: rotate(45deg); }
+.as-plate-tag { color: var(--tier); }
+.as-plate-fire { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 3px 6px; color: #1c0a00; background: linear-gradient(90deg, #ffb13b, #ff5a1f); letter-spacing: .1em; font-size: 10px; text-shadow: none; animation: x-flicker 1.2s steps(3) infinite; }
+.as-plate h3 { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 46px/.95 var(--as-display); text-transform: uppercase; letter-spacing: .005em; text-shadow: 0 3px 16px rgba(0,0,0,.5); }
+.as-plate .as-card-xp { margin-top: 0; }
+.as-plate .as-abilities { width: 100%; margin: 8px 0 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; background: rgba(10,10,24,.62); border: 1px solid rgba(255,255,255,.12); }
+.as-plate .as-abilities span { display: flex; justify-content: center; align-items: center; gap: 7px; min-width: 0; padding: 8px 4px; background: none; border: 0; border-left: 1px solid rgba(255,255,255,.1); color: #bdbbd6; }
+.as-plate .as-abilities span:first-child { border-left: 0; }
+.as-plate .as-abilities b { color: #fff; font-size: 15px; }
+.as-card.is-focused .as-abilities, .as-card.is-leader .as-abilities { border-color: rgba(var(--tier-rgb),.6); }
+.as-card.is-focused .as-abilities span, .as-card.is-leader .as-abilities span { color: var(--tier); }
+.as-card--radiant .as-plate h3 { color: #fff; text-shadow: 0 2px 0 #6b4f08, 0 0 22px rgba(245,220,114,.75), 0 4px 18px rgba(0,0,0,.6); }
+@media (max-height: 950px) and (min-width: 1051px) {
+  .as-card-top { top: 10px; left: 14px; right: 10px; } .as-card-top .rank-emblem { width: 40px; height: 40px; }
+  .as-plate { padding: 0 10px 8px; gap: 2px; } .as-plate h3 { font-size: 32px; } .as-plate-line { font-size: 10px; min-height: 18px; }
+  .as-plate .as-abilities { margin-top: 4px; } .as-plate .as-abilities span { padding: 5px 2px; gap: 4px; } .as-plate .as-abilities svg { width: 13px; height: 13px; } .as-plate .as-abilities b { font-size: 12px; }
+}
+@media (max-width: 1500px) and (min-width: 1051px) { .as-plate h3 { font-size: 32px; } .as-plate .as-abilities svg { display: none; } }
+.as-plate-line { flex-wrap: nowrap; white-space: nowrap; max-width: 100%; padding: 5px 10px; background: rgba(10,10,24,.66); border: 1px solid rgba(var(--tier-rgb),.45); }
+.as-plate-line > span { overflow: hidden; text-overflow: ellipsis; }
+.as-card-top .as-card-rank { display: flex; align-items: center; gap: 8px; }
+.as-card-fire { display: grid; place-items: center; width: 30px; height: 30px; color: #1c0a00; background: linear-gradient(135deg, #ffb13b, #ff5a1f); border-radius: 50%; box-shadow: 0 0 16px rgba(255,110,40,.7); animation: x-flicker 1.2s steps(3) infinite; }
+@media (max-height: 950px) and (min-width: 1051px) { .as-card-fire { width: 22px; height: 22px; } .as-card-fire svg { width: 12px; height: 12px; } .as-plate-line { padding: 3px 7px; } }

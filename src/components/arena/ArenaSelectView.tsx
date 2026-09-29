@@ -5,7 +5,7 @@ import { ArenaIcon, type IconName } from '../ui/ArenaIcon';
 import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, tierForRank, compact, elapsed, eventIcons, number, rankBy, type UiMode } from '../shared';
 import { getLevel } from '../../lib/xp';
 import { getBadgeDef } from '../../lib/badges';
-import { MatchPointChip, OnFireChip, seasonClock } from '../extras';
+import { MatchPointChip, seasonClock } from '../extras';
 import type { DevStats, FeedItem, Member } from '../../types';
 import './arena.css';
 
@@ -78,22 +78,27 @@ function PartyFeed({ feed, members, now, active }: { feed: FeedItem[]; members: 
 
 function Abilities({ s }: { s?: DevStats }) {
   const items: Array<[IconName, number, string]> = [['git', s?.monthlyCommits || 0, 'Commits'], ['merge', s?.monthlyPRsMerged || 0, 'Merges'], ['review', s?.monthlyPRsReviewed || 0, 'Reviews'], ['flame', s?.streak || 0, 'Streak']];
-  return <div className="as-abilities">{items.map(([icon, value, label]) => <span key={label} title={label}><ArenaIcon name={icon} size={20}/><b>{compact(value)}</b></span>)}</div>;
+  return <div className="as-abilities">{items.map(([icon, value, label]) => <span key={label} title={label}><ArenaIcon name={icon} size={17}/><b>{compact(value)}</b></span>)}</div>;
 }
 
 function AgentCard({ member, s, rank, focused, rose, onFire }: { member: Member; s?: DevStats; rank: number; focused: boolean; rose: boolean; onFire: boolean }) {
-  const leader = rank === 0;
+  const leader = rank === 0, tier = tierForRank(rank), level = getLevel(s?.totalXp || 0);
   return <motion.article layout className={`as-card ${leader ? 'is-leader' : ''} ${focused ? 'is-focused' : ''} ${tierForRank(rank) ? `as-card--${tierForRank(rank)}` : ''} ${onFire ? 'is-onfire' : ''}`} transition={{ layout: { type: 'spring', stiffness: 170, damping: 22 } }}>
     <div className="as-card-art">{member.avatarUrl ? <img src={member.avatarUrl} alt=""/> : <span style={{ background: member.color }}/>}</div>
-    <span className="as-card-rank">{String(rank + 1).padStart(2, '0')}</span>
-    {tierForRank(rank) && <div className={`as-card-tier as-card-tier--${tierForRank(rank)}`}><RankEmblem tier={tierForRank(rank)!} size={rank === 0 ? 64 : 54}/><span>{tierForRank(rank)}</span></div>}
-    {leader && <span className="as-card-flag"><ArenaIcon name="trophy" size={15}/> LOCKED IN</span>}
+    <header className="as-card-top">
+      <span className="as-card-rank">{String(rank + 1).padStart(2, '0')}{onFire && <span className="as-card-fire" title="On fire: 3+ plays this hour"><ArenaIcon name="flame" size={16}/></span>}</span>
+      {tier && <RankEmblem tier={tier} size={leader ? 62 : 52}/>}
+    </header>
     <AnimatePresence>{rose && <motion.span className="as-rankup" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }}><ArenaIcon name="arrow" size={14}/> RANK UP</motion.span>}</AnimatePresence>
-    <div className="as-card-foot">
-      <AnimatePresence>{(leader || focused) && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: 0.3 }}><Abilities s={s}/></motion.div>}</AnimatePresence>
-      {onFire && <OnFireChip size={13}/>}
+    <div className="as-plate">
+      <div className="as-plate-line">
+        <span className="as-plate-tag">{tier || `LVL ${level.level}`}</span>
+        <i/>
+        <span>{leader ? 'LOCKED IN' : tier ? `LVL ${level.level}` : level.title}</span>
+      </div>
       <h3>{member.name}</h3>
       <AnimatedScore xp={s?.monthlyXp || 0} className="as-card-xp"/>
+      <Abilities s={s}/>
     </div>
   </motion.article>;
 }
