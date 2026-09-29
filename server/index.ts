@@ -1981,6 +1981,19 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, clients: sseClients.length, seenIds: seenIds.size, repos: state.repos.length });
 });
 
+// ── Custom sound clips ───────────────────────────
+// Drop audio files into <data dir>/sounds (e.g. kill-1.mp3, ace.ogg) to
+// replace the TV's synthesized cues. Kept out of the image and git.
+const SOUNDS_DIR = path.join(DATA_DIR, 'sounds');
+const SOUND_EXT = /\.(mp3|ogg|wav|m4a|webm)$/i;
+app.get('/api/sounds', (_req, res) => {
+  try {
+    const files = fs.existsSync(SOUNDS_DIR) ? fs.readdirSync(SOUNDS_DIR).filter(f => SOUND_EXT.test(f)) : [];
+    res.json(Object.fromEntries(files.map(f => [f.replace(SOUND_EXT, '').toLowerCase(), `/sounds/${encodeURIComponent(f)}`])));
+  } catch { res.json({}); }
+});
+app.use('/sounds', express.static(SOUNDS_DIR, { maxAge: '1h', fallthrough: false }));
+
 // ── Static frontend (production / Docker) ────────
 // When SERVE_STATIC=1 the backend serves the Vite build output.
 // In development the Vite dev server handles the frontend separately.
