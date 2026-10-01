@@ -157,7 +157,7 @@ function AgentCards({ ranked, stats, active, hot }: { ranked: Member[]; stats: R
     <div className="as-select-head"><h1>The Standings</h1><span>MONTHLY XP · TOP 5 LOCKED</span></div>
     <div className="as-cards">{top.length === 0 ? <div className="as-empty">THE ARENA IS QUIET</div> : top.map((m, i) => <AgentCard key={m.login} member={m} s={stats[m.login]} rank={i} focused={i !== 0 && i === focus} rose={!!risen[m.login]} onFire={hot.has(m.login)} gap={rankGap(ranked, stats, i)}/>)}</div>
     {rest.length > 0 && <div className="as-bench">
-      <div className="as-bench-label"><span>THE BENCH</span><small>{pages > 1 ? `${page + 1} / ${pages}` : `${rest.length}`}</small></div>
+      <div className="as-bench-label"><span>THE<br/>BENCH</span><small>{pages > 1 ? `${page + 1} / ${pages}` : `${rest.length}`}</small></div>
       <div className="as-bench-cards"><AnimatePresence mode="wait" initial={false}><motion.div key={page} className="as-bench-page" style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}>{shown.map((m, i) => <MiniCard key={m.login} member={m} s={stats[m.login]} rank={5 + (page % Math.max(1, pages)) * count + i} onFire={hot.has(m.login)}/>)}</motion.div></AnimatePresence></div>
     </div>}
   </section>;

@@ -422,3 +422,17 @@
   .as-meta-grid { grid-template-columns:1fr; }.as-meta-tile { height:76px; }.as-season-copy h2 { font-size:44px; }
   .as-moment-inner h2 { font-size:clamp(40px,12vw,72px); }.as-moment-inner small { display:block; padding:0 24px; font-size:12px; line-height:1.4; }.as-moment-inner span { font-size:12px; }
 }
+
+/* Explicit tracks prevent the season card's intrinsic width from widening the rail. */
+.as-rail, .as-main, .as-select { grid-template-columns:minmax(0,1fr); }
+.as-season, .as-party, .as-select-head, .as-bench-label { min-width:0; }
+.as-season-copy h2 { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.as-season-copy small { display:block; line-height:1.4; overflow-wrap:anywhere; }
+.as-bench-label span { display:block; max-width:100%; white-space:normal; font-size:clamp(18px,1.25vw,24px); line-height:1; }
+.as-bench-label { padding-left:8px; }
+.as-season { isolation:isolate; }
+@media(min-width:1051px) and (max-width:1500px) {
+  .as-season-copy h2 { font-size:36px; }
+  .as-season-copy small { font-size:10px; letter-spacing:.05em; }
+  .as-ring { width:64px; height:64px; margin-left:8px; }
+}

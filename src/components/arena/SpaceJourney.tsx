@@ -22,17 +22,17 @@ export function SpaceJourney({ now }: { now: number }) {
   const review = recent && last.type === 'review';
   const boosting = recent && ['commit', 'branch-push', 'pr-merged'].includes(last.type);
   const damaged = alerts.length > 0;
-  const previous = useRef<{month: string; defeated: number; arrived: boolean; damaged: boolean} | null>(null);
+  const previous = useRef<{month: string; defeated: number; arrived: boolean; damaged: boolean; percent: number} | null>(null);
   const [moment, setMoment] = useState('');
   const [repairing, setRepairing] = useState(false);
   useEffect(() => {
     const before = previous.current;
-    previous.current = {month, defeated, arrived, damaged};
-    if (!before || before.month !== month) { setMoment(''); setRepairing(false); return; }
+    previous.current = {month, defeated, arrived, damaged, percent: voyage.percent};
+    if (!before || before.month !== month || voyage.percent < before.percent) { setMoment(''); setRepairing(false); return; }
     if (arrived && !before.arrived) setMoment('DESTINATION REACHED');
     else if (defeated > before.defeated) setMoment('HOSTILE DEFEATED');
     if (before.damaged && !damaged) setRepairing(true);
-  }, [month, defeated, arrived, damaged]);
+  }, [month, defeated, arrived, damaged, voyage.percent]);
   useEffect(() => { if (!moment) return; const t = setTimeout(() => setMoment(''), 5000); return () => clearTimeout(t); }, [moment]);
   useEffect(() => { if (!repairing) return; const t = setTimeout(() => setRepairing(false), 7000); return () => clearTimeout(t); }, [repairing]);
   const status = damaged ? 'SYSTEM FAULT' : repairing ? 'REPAIRS COMPLETE' : review ? 'SHIELDS CHARGING' : boosting ? 'ENGINE BOOST' : arrived ? 'STABLE ORBIT' : encounter ? 'ENGAGING HOSTILE' : 'CRUISING';

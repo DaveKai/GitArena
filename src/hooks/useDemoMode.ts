@@ -141,9 +141,13 @@ export function useDemoMode() {
       useStore.setState({ stats: { ...store.stats } });
 
       // Boss ~45%
-      setBossProgress('issuesClosed', 14);
-      setBossProgress('prsMerged', 9);
-      setBossProgress('commits', 90);
+      if (new URLSearchParams(window.location.search).get('panel') === 'voyage') {
+        useStore.setState({ bossProgress: Object.fromEntries(store.bossGoals.map(g => [g.metric, g.target * .18])) });
+      } else {
+        setBossProgress('issuesClosed', 14);
+        setBossProgress('prsMerged', 9);
+        setBossProgress('commits', 90);
+      }
 
       // Shame PRs
       setShamePRs([
