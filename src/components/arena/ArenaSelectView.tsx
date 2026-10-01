@@ -8,6 +8,7 @@ import { getBadgeDef } from '../../lib/badges';
 import { MatchPointChip, SpikeChip, seasonClock } from '../extras';
 import type { DevStats, FeedItem, Member } from '../../types';
 import './arena.css';
+import { SpaceJourney } from './SpaceJourney';
 
 const sections: Array<{ label: string; icon: IconName }> = [{ label: 'Standings', icon: 'users' }, { label: 'Pulse', icon: 'bolt' }, { label: 'Meta', icon: 'layers' }, { label: 'Spotlight', icon: 'star' }];
 const DAY = 86400000;
@@ -213,6 +214,7 @@ export function ArenaSelectView({ now, hot, soundOn, onSound, uiMode, onUiMode }
   const members = useStore(s => s.members), stats = useStore(s => s.stats), feed = useStore(s => s.feed), bossProgress = useStore(s => s.bossProgress), bossIndex = useStore(s => s.bossIndex), bossGoals = useStore(s => s.bossGoals), isDemo = useStore(s => s.isDemo), periodStart = useStore(s => s.monthStartDate), overlay = useStore(s => s.overlayQueue[0]), popOverlay = useStore(s => s.popOverlay);
   const ranked = useMemo(() => rankBy(members, stats), [members, stats]);
   const section = useTicker(sections.length, 6000);
+  const voyageSlot = useTicker(2, 24000);
   const complete = bossGoals.length > 0 && bossIndex >= bossGoals.length;
   const goal = complete ? { label: 'ALL GOALS COMPLETE', metric: 'complete', target: 1 } : bossGoals[bossIndex] || { label: 'NO OBJECTIVE SET', metric: 'none', target: 1 };
   const teamXp = Object.values(stats).reduce((n, s) => n + s.monthlyXp, 0);
@@ -221,7 +223,7 @@ export function ArenaSelectView({ now, hot, soundOn, onSound, uiMode, onUiMode }
     <TopBar now={now} periodStart={periodStart} isDemo={isDemo} memberCount={members.length} section={section} soundOn={soundOn} onSound={onSound} uiMode={uiMode} onUiMode={onUiMode}/>
     <aside className="as-rail"><SeasonCard periodStart={periodStart} now={now} teamXp={teamXp} active={section === 1}/><PartyFeed feed={feed} members={members} now={now} active={section === 1}/></aside>
     <main className="as-main"><AgentCards ranked={ranked} stats={stats} active={section === 0} hot={hot}/><LockInBar goal={goal} progress={complete ? 1 : bossProgress[goal.metric] || 0} complete={complete} goals={bossGoals.length} index={bossIndex}/></main>
-    <PlayerCard ranked={ranked} stats={stats} active={section === 3}/>
+    {voyageSlot === 1 ? <SpaceJourney/> : <PlayerCard ranked={ranked} stats={stats} active={section === 3}/>}
     <TeamMeta members={members} stats={stats} active={section === 2}/>
     <AnimatePresence>{overlay && <ArenaMoment key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence>
   </div>;
