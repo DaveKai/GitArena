@@ -9,6 +9,7 @@ import { MatchPointChip, SpikeChip, seasonClock } from '../extras';
 import type { DevStats, FeedItem, Member } from '../../types';
 import './arena.css';
 import { SpaceJourney } from './SpaceJourney';
+import { benchCapacity, useDisplaySize } from '../../hooks/useDisplaySize';
 
 const sections: Array<{ label: string; icon: IconName }> = [{ label: 'Standings', icon: 'users' }, { label: 'Pulse', icon: 'bolt' }, { label: 'Meta', icon: 'layers' }, { label: 'Spotlight', icon: 'star' }];
 const DAY = 86400000;
@@ -61,15 +62,30 @@ function feedVerb(item: FeedItem) {
 
 function PartyFeed({ feed, members, now, active }: { feed: FeedItem[]; members: Member[]; now: number; active: boolean }) {
   const recent = feed.slice(0, 10);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [visibleRows, setVisibleRows] = useState(5);
+  useEffect(() => {
+    const node = listRef.current;
+    if (!node) return;
+    const resize = () => {
+      const row = node.querySelector<HTMLElement>('.as-party-row');
+      const style = getComputedStyle(node);
+      const available = node.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      setVisibleRows(Math.max(1, Math.floor(available / (row?.offsetHeight || 76))));
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(node); resize();
+    return () => observer.disconnect();
+  }, [recent.length]);
   const [offset, setOffset] = useState(0);
   useEffect(() => { setOffset(0); }, [recent[0]?.id]);
-  useEffect(() => { if (recent.length <= 5) return; const id = setInterval(() => setOffset(o => (o + 1) % recent.length), 4200); return () => clearInterval(id); }, [recent.length]);
+  useEffect(() => { if (recent.length <= visibleRows) return; const id = setInterval(() => setOffset(o => (o + 1) % recent.length), 4200); return () => clearInterval(id); }, [recent.length, visibleRows]);
   const rows = recent.length ? [...recent.slice(offset), ...recent.slice(0, offset)] : [];
   return <section className={`as-party ${active ? 'is-called' : ''}`}>
     <div className="as-panel-head"><span><ArenaIcon name="bolt" size={16}/> THE PULSE</span><small><i/> LIVE</small></div>
-    <div className="as-party-list">
+    <div className="as-party-list" ref={listRef}>
       {rows.length === 0 && <div className="as-empty">WAITING FOR THE FIRST MOVE</div>}
-      {rows.map(item => { const member = members.find(m => m.login === item.user); return <motion.div layout key={item.id} className={`as-party-row ${item.id === recent[0]?.id ? 'is-latest' : ''}`} initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
+      {rows.slice(0, visibleRows).map(item => { const member = members.find(m => m.login === item.user); return <motion.div layout key={item.id} className={`as-party-row ${item.id === recent[0]?.id ? 'is-latest' : ''}`} initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
         <div className="as-hex"><Avatar member={member}/><span className="as-hex-badge"><ArenaIcon name={eventIcons[item.type] || 'spark'} size={13}/></span></div>
         <div className="as-party-copy"><strong>{member?.name || item.user}</strong><small>{feedVerb(item)} <b>·</b> {item.repo || item.detail}</small></div>
         <div className="as-party-meta"><strong>{item.type === 'branch-push' ? 'PR' : item.xp > 0 ? `+${item.xp}` : '—'}</strong><small>{elapsed(item.time, now)}</small></div>
@@ -119,7 +135,9 @@ function MiniCard({ member, s, rank, onFire }: { member: Member; s?: DevStats; r
 function AgentCards({ ranked, stats, active, hot }: { ranked: Member[]; stats: Record<string, DevStats>; active: boolean; hot: Set<string> }) {
   const top = ranked.slice(0, 5), rest = ranked.slice(5);
   const focus = useTicker(top.length, 3800);
-  const pages = Math.ceil(rest.length / 5);
+  const { width } = useDisplaySize();
+  const count = benchCapacity(width);
+  const pages = Math.ceil(rest.length / count);
   const page = useTicker(pages, 5200);
   const previous = useRef<Record<string, number>>({});
   const [risen, setRisen] = useState<Record<string, boolean>>({});
@@ -134,13 +152,13 @@ function AgentCards({ ranked, stats, active, hot }: { ranked: Member[]; stats: R
     const id = setTimeout(() => setRisen({}), 3500);
     return () => clearTimeout(id);
   }, [order]);
-  const shown = rest.slice(page * 5, page * 5 + 5);
+  const shown = rest.slice((page % Math.max(1, pages)) * count, ((page % Math.max(1, pages)) + 1) * count);
   return <section className={`as-select ${active ? 'is-called' : ''}`}>
     <div className="as-select-head"><h1>The Standings</h1><span>MONTHLY XP · TOP 5 LOCKED</span></div>
     <div className="as-cards">{top.length === 0 ? <div className="as-empty">THE ARENA IS QUIET</div> : top.map((m, i) => <AgentCard key={m.login} member={m} s={stats[m.login]} rank={i} focused={i !== 0 && i === focus} rose={!!risen[m.login]} onFire={hot.has(m.login)} gap={rankGap(ranked, stats, i)}/>)}</div>
     {rest.length > 0 && <div className="as-bench">
       <div className="as-bench-label"><span>THE BENCH</span><small>{pages > 1 ? `${page + 1} / ${pages}` : `${rest.length}`}</small></div>
-      <div className="as-bench-cards"><AnimatePresence mode="wait" initial={false}><motion.div key={page} className="as-bench-page">{shown.map((m, i) => <MiniCard key={m.login} member={m} s={stats[m.login]} rank={5 + page * 5 + i} onFire={hot.has(m.login)}/>)}</motion.div></AnimatePresence></div>
+      <div className="as-bench-cards"><AnimatePresence mode="wait" initial={false}><motion.div key={page} className="as-bench-page" style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}>{shown.map((m, i) => <MiniCard key={m.login} member={m} s={stats[m.login]} rank={5 + (page % Math.max(1, pages)) * count + i} onFire={hot.has(m.login)}/>)}</motion.div></AnimatePresence></div>
     </div>}
   </section>;
 }
@@ -223,7 +241,7 @@ export function ArenaSelectView({ now, hot, soundOn, onSound, uiMode, onUiMode }
     <TopBar now={now} periodStart={periodStart} isDemo={isDemo} memberCount={members.length} section={section} soundOn={soundOn} onSound={onSound} uiMode={uiMode} onUiMode={onUiMode}/>
     <aside className="as-rail"><SeasonCard periodStart={periodStart} now={now} teamXp={teamXp} active={section === 1}/><PartyFeed feed={feed} members={members} now={now} active={section === 1}/></aside>
     <main className="as-main"><AgentCards ranked={ranked} stats={stats} active={section === 0} hot={hot}/><LockInBar goal={goal} progress={complete ? 1 : bossProgress[goal.metric] || 0} complete={complete} goals={bossGoals.length} index={bossIndex}/></main>
-    {voyageSlot === 1 ? <SpaceJourney/> : <PlayerCard ranked={ranked} stats={stats} active={section === 3}/>}
+    {(voyageSlot === 1 || new URLSearchParams(window.location.search).get('panel') === 'voyage') ? <SpaceJourney now={now}/> : <PlayerCard ranked={ranked} stats={stats} active={section === 3}/>}
     <TeamMeta members={members} stats={stats} active={section === 2}/>
     <AnimatePresence>{overlay && <ArenaMoment key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence>
   </div>;

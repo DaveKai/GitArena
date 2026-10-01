@@ -183,9 +183,42 @@ export function useDemoMode() {
     }, 100);
   }, [isDemo, setMembers, addXp, setBossProgress, setShamePRs, setBelts, incrementStat, bumpStreak, awardBadge]);
 
+  // An explicit voyage preview runs a repeatable fake mission locally.
+  useEffect(() => {
+    if (!isDemo || new URLSearchParams(window.location.search).get('panel') !== 'voyage') return;
+    const stages = [
+      { percent: 18, type: 'commit' as const, damage: false },
+      { percent: 25, type: 'pr-merged' as const, damage: false },
+      { percent: 28, type: 'review' as const, damage: false },
+      { percent: 32, type: 'commit' as const, damage: true },
+      { percent: 36, type: 'pr-merged' as const, damage: false },
+      { percent: 50, type: 'commit' as const, damage: false },
+      { percent: 56, type: 'review' as const, damage: false },
+      { percent: 61, type: 'pr-merged' as const, damage: false },
+      { percent: 75, type: 'commit' as const, damage: true },
+      { percent: 81, type: 'review' as const, damage: false },
+      { percent: 86, type: 'pr-merged' as const, damage: false },
+      { percent: 100, type: 'commit' as const, damage: false },
+    ];
+    let index = 0;
+    const step = () => {
+      const stage = stages[index++ % stages.length];
+      const state = useStore.getState();
+      const event: FeedItem = { id: `voyage-demo-${Date.now()}`, type: stage.type, user: 'alice', repo: 'api-server', message: stage.type === 'review' ? 'reviewed PR' : stage.type === 'pr-merged' ? 'merged PR' : 'pushed a commit', detail: 'Voyage simulation', xp: 0, time: new Date().toISOString() };
+      useStore.setState({
+        bossProgress: Object.fromEntries(state.bossGoals.map(g => [g.metric, g.target * stage.percent / 100])),
+        ciAlerts: stage.damage ? [{ repo: 'api-server', branch: 'staging', failing: true, workflow: 'Build', url: '', since: event.time }] : [],
+        feed: [event, ...state.feed].slice(0, 50),
+      });
+    };
+    const start = setTimeout(step, 500);
+    const timer = setInterval(step, 8000);
+    return () => { clearTimeout(start); clearInterval(timer); };
+  }, [isDemo]);
+
   // Demo tick — simulate live events every 7-12s
   useEffect(() => {
-    if (!isDemo) return;
+    if (!isDemo || new URLSearchParams(window.location.search).get('panel') === 'voyage') return;
 
     function demoTick() {
       const member = pick(DEMO_MEMBERS.filter(m => m.login !== 'karim'));

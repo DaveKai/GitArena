@@ -1,51 +1,78 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
+import { ArenaIcon } from '../ui/ArenaIcon';
+import { ENCOUNTERS, voyageState } from './voyage';
 import './space.css';
 
-export function SpaceJourney() {
+function Drone({ second = false }: { second?: boolean }) {
+  return <svg className={`space-drone ${second ? 'space-drone-second' : ''}`} viewBox="0 0 60 40"><path d="M7 10h12l6 10-6 10H7l6-10ZM53 10H41l-6 10 6 10h12l-6-10Z" fill="#44388b" stroke="#a99bff"/><path d="m30 8 12 12-12 12-12-12Z" fill="#c8f9f6"/><circle cx="30" cy="20" r="5" fill="#6c5cf0"/></svg>;
+}
+
+export function SpaceJourney({ now }: { now: number }) {
   const goals = useStore(s => s.bossGoals), progress = useStore(s => s.bossProgress);
   const alerts = useStore(s => s.ciAlerts), feed = useStore(s => s.feed), month = useStore(s => s.monthStartDate);
-  const journey = goals.length ? goals.reduce((sum, g) => sum + Math.min(1, Math.max(0, (progress[g.metric] || 0) / Math.max(1, g.target))), 0) / goals.length : 0;
-  const pct = Math.floor(journey * 100);
-  // Encounter windows begin at 25/50/75%; subsequent goal progress defeats each boss.
-  const checkpoint = [25, 50, 75].find(start => pct >= start && pct < start + 10);
-  const health = checkpoint === undefined ? 0 : Math.max(0, 100 - (pct - checkpoint) * 10);
-  const defeated = [35, 60, 85].filter(end => pct >= end).length;
+  const demo = useStore(s => s.isDemo);
+  const voyage = voyageState(goals, progress);
+  const { encounter, health, defeated, arrived } = voyage;
+  const pct = Math.floor(voyage.percent + 1e-8);
+  const id = useId().replace(/:/g, '');
   const last = feed[0];
-  const recent = last && Date.now() - Date.parse(last.time) < 60000;
+  const age = last ? now - Date.parse(last.time) : Infinity;
+  const recent = age >= 0 && age < 14000;
   const review = recent && last.type === 'review';
   const boosting = recent && ['commit', 'branch-push', 'pr-merged'].includes(last.type);
-  const previous = useRef<{month: string; defeated: number; arrived: boolean} | null>(null);
+  const damaged = alerts.length > 0;
+  const previous = useRef<{month: string; defeated: number; arrived: boolean; damaged: boolean} | null>(null);
   const [moment, setMoment] = useState('');
+  const [repairing, setRepairing] = useState(false);
   useEffect(() => {
     const before = previous.current;
-    previous.current = {month, defeated, arrived: pct === 100};
-    if (!before || before.month !== month) return;
-    if (pct === 100 && !before.arrived) setMoment('DESTINATION REACHED');
+    previous.current = {month, defeated, arrived, damaged};
+    if (!before || before.month !== month) { setMoment(''); setRepairing(false); return; }
+    if (arrived && !before.arrived) setMoment('DESTINATION REACHED');
     else if (defeated > before.defeated) setMoment('HOSTILE DEFEATED');
-  }, [month, defeated, pct]);
-  useEffect(() => { if (!moment) return; const id = setTimeout(() => setMoment(''), 6500); return () => clearTimeout(id); }, [moment]);
-  return <section className={`space-journey ${boosting ? 'space-boost' : ''} ${alerts.length ? 'space-damage' : ''}`} aria-label={`Team voyage ${pct}% complete`}>
+    if (before.damaged && !damaged) setRepairing(true);
+  }, [month, defeated, arrived, damaged]);
+  useEffect(() => { if (!moment) return; const t = setTimeout(() => setMoment(''), 5000); return () => clearTimeout(t); }, [moment]);
+  useEffect(() => { if (!repairing) return; const t = setTimeout(() => setRepairing(false), 7000); return () => clearTimeout(t); }, [repairing]);
+  const status = damaged ? 'SYSTEM FAULT' : repairing ? 'REPAIRS COMPLETE' : review ? 'SHIELDS CHARGING' : boosting ? 'ENGINE BOOST' : arrived ? 'STABLE ORBIT' : encounter ? 'ENGAGING HOSTILE' : 'CRUISING';
+  return <section className={`space-journey ${boosting ? 'space-boost' : ''} ${damaged ? 'space-damage' : ''} ${review || repairing ? 'space-support' : ''} ${encounter ? 'space-combat' : ''}`} aria-label={`Team voyage ${pct}% complete`}>
     <div className="space-scene" aria-hidden="true">
-      <div className="space-stars"/><div className="space-planet"/>
-      <svg className="space-ship" viewBox="0 0 300 160">
-        <defs><linearGradient id="ship-hull"><stop stopColor="#e5e2ff"/><stop offset="1" stopColor="#6c5cf0"/></linearGradient></defs>
-        <path className="space-engine" d="M78 60 5 80l73 20Z" fill="#9a8fff"/>
-        <path d="m80 64 36-44 70 39 94 21-94 21-70 39-36-44Z" fill="url(#ship-hull)" stroke="#c8c1ff" strokeWidth="2"/>
-        <path d="m124 62 50 18-50 18 14-18Z" fill="#17162e"/><path d="m191 68 49 12-49 12Z" fill="#8df5f1"/>
-        <path d="M92 51h34M92 109h34" stroke="#8df5f1" strokeWidth="4"/>
-        <ellipse className={review ? 'space-shield space-shield-live' : 'space-shield'} cx="166" cy="80" rx="123" ry="69" fill="none" stroke="#8df5f1" strokeWidth="2"/>
+      <div className="space-nebula"/><div className="space-stars"/><div className="space-planet"><i/><i/><i/></div>
+      <div className="space-coordinates">SECTOR {String(defeated + 1).padStart(2, '0')}<span>{encounter?.sector || (arrived ? 'New horizon' : 'Deep space')}</span></div>
+      <svg className="space-ship" viewBox="0 0 320 180">
+        <defs>
+          <linearGradient id={`${id}-hull`} x2="0.9" y2="1"><stop stopColor="#ebe8ff"/><stop offset=".45" stopColor="#9285ce"/><stop offset="1" stopColor="#382d69"/></linearGradient>
+          <linearGradient id={`${id}-engine`}><stop stopColor="#8df5f1" stopOpacity="0"/><stop offset=".7" stopColor="#9a8fff"/><stop offset="1" stopColor="#fff"/></linearGradient>
+        </defs>
+        <path className="space-engine" d="M92 64 4 78l88 14Z" fill={`url(#${id}-engine)`}/>
+        <path className="space-engine space-engine-lower" d="M92 94 4 108l88 14Z" fill={`url(#${id}-engine)`}/>
+        <path d="m82 73 34-51 61 30 43 26 68 12-68 12-43 26-61 30-34-51 26-17Z" fill={`url(#${id}-hull)`} stroke="#c7bcff" strokeWidth="1.5"/>
+        <path d="m116 22 27 49 34-19ZM116 158l27-49 34 19Z" fill="#51437f" stroke="#8a7bb2"/>
+        <path d="m120 77 93 13-93 13 16-13Z" fill="#252238" stroke="#a99bdf"/>
+        <path d="m205 79 45 11-45 11 10-11Z" fill="#8df5f1"/>
+        <path d="M98 59h22M98 121h22" stroke="#8df5f1" strokeWidth="4"/>
+        <path d="m147 51 18 12m-18 66 18-12M159 80h24M159 100h24" stroke="#bfb3ec" strokeWidth="2"/>
+        <path d="M86 71v15M86 95v15" stroke="#fff" strokeWidth="4"/>
+        <ellipse className="space-shield" cx="178" cy="90" rx="130" ry="77" fill="none" stroke="#8df5f1" strokeWidth="1.5" strokeDasharray="6 4"/>
       </svg>
-      {checkpoint !== undefined && <svg className="space-hostile" viewBox="0 0 100 100"><path d="m50 4 18 26 27-8-12 31 12 25-31-2-14 20-14-20-31 2 12-25L5 22l27 8Z" fill="#591b40" stroke="#ff6480" strokeWidth="3"/><path d="m28 43 16 8m28-8-16 8" stroke="#ff8ca5" strokeWidth="5"/></svg>}
-      {checkpoint !== undefined && <div className="space-laser"/>}
-      {alerts.length > 0 && <span className="space-warning">SYSTEM DAMAGE · {alerts.length} CI ALERTS</span>}
-      {moment && <div className="space-victory">{moment}</div>}
+      {(review || repairing) && <><Drone/><Drone second/><div className="space-repair-beam"/></>}
+      {encounter && <><svg className="space-hostile" viewBox="0 0 120 140">
+        <path d="m60 8 20 29 31-17-7 44 11 34-29-6-26 40-26-40-29 6 11-34-7-44 31 17Z" fill="#34182f" stroke="#ff6480" strokeWidth="2"/>
+        <path d="m60 27 23 41-23 43-23-43Z" fill="#722943" stroke="#ffa6b8"/>
+        <path d="M40 61 55 69m25-8-15 8" stroke="#ffc1ce" strokeWidth="4"/><path d="m52 86 8 10 8-10" fill="none" stroke="#ff6480" strokeWidth="3"/>
+      </svg><div className="space-laser"/><div className="space-hit"/></>}
+      {damaged && <><span className="space-spark space-spark-a"/><span className="space-spark space-spark-b"/></>}
+      <div className="space-scene-footer"><span><i/>{status}</span><b>GA–01 / ODYSSEY</b></div>
+      {moment && <div className="space-victory"><ArenaIcon name={arrived ? 'star' : 'shield'} size={28}/><strong>{moment}</strong><span>{arrived ? 'A new world, built together.' : 'The crew pushed through.'}</span></div>}
     </div>
-    <div className="space-readout"><span className="space-kicker">TEAM VOYAGE / {month.slice(0, 7)}</span><h2>{pct === 100 ? 'Orbit achieved' : checkpoint !== undefined ? 'Hostile contact' : 'Beyond the horizon'}</h2>
-      <div className="space-route"><i style={{width: `${pct}%`}}/>{[25,50,75].map(n => <b key={n} style={{left: `${n}%`}}/>)}</div>
-      <div className="space-status"><strong>{pct}%</strong><span>{checkpoint !== undefined ? `HOSTILE HULL ${health}%` : `${defeated}/3 HOSTILES CLEARED`}</span></div>
-      {checkpoint !== undefined && <div className="space-health"><i style={{width: `${health}%`}}/></div>}
-      <p>{!goals.length ? 'Awaiting team objectives.' : review ? 'Review received. Shields reinforced.' : boosting ? 'Fresh activity. Engines burning.' : 'Monthly team goals power the journey.'}</p>
+    <div className="space-readout">
+      <div className="space-heading"><span className="space-kicker">TEAM VOYAGE / {month.slice(0, 7)}</span>{demo && <b className="space-demo">SIMULATION</b>}</div>
+      <h2>{arrived ? 'Orbit achieved' : encounter?.name || 'Beyond the horizon'}</h2>
+      <div className="space-status"><strong>{pct}<small>%</small></strong><span>{encounter ? 'BOSS ENCOUNTER' : `${defeated} / 3 HOSTILES CLEARED`}</span></div>
+      <div className="space-route"><i style={{width: `${voyage.percent}%`}}/>{ENCOUNTERS.map(e => <b key={e.start} className={pct >= e.end ? 'cleared' : pct >= e.start ? 'active' : ''} style={{left: `${e.start}%`}}/>)}</div>
+      {encounter ? <div className="space-boss-status"><span>HOSTILE HULL</span><div className="space-health"><i style={{width: `${health}%`}}/></div><b>{health}%</b></div> : <div className="space-next">{arrived ? 'MONTHLY MISSION COMPLETE' : `NEXT CONTACT / ${ENCOUNTERS.find(e => e.start > pct)?.start || 100}%`}</div>}
+      <p>{!voyage.configured ? 'Awaiting team objectives.' : damaged ? `CI needs attention in ${alerts[0].repo}.` : repairing ? 'Build restored. Repair drones returning.' : review ? 'Review received. Support drones deployed.' : boosting ? 'Fresh activity. Engines burning.' : 'Team objectives power our flight.'}</p>
     </div>
   </section>;
 }

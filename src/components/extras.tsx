@@ -1,3 +1,4 @@
+import { scoreboardCapacity, useDisplaySize } from '../hooks/useDisplaySize';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../store/useStore';
@@ -169,6 +170,7 @@ type Takeover = NonNullable<ReturnType<typeof buildTakeover>>;
  */
 export function Takeovers({ blocked }: { blocked: boolean }) {
   const members = useStore(s => s.members);
+  const { width, height } = useDisplaySize();
   const [show, setShow] = useState<Takeover | null>(null);
   const blockedRef = useRef(blocked), cursor = useRef(0);
   blockedRef.current = blocked;
@@ -189,7 +191,10 @@ export function Takeovers({ blocked }: { blocked: boolean }) {
     const id = setInterval(run, forced ? 20000 : every);
     return () => { clearTimeout(first); clearInterval(id); };
   }, []);
-  useEffect(() => { if (!show) return; const id = setTimeout(() => setShow(null), takeoverSeconds(show.kind) * 1000); return () => clearTimeout(id); }, [show]);
+  const duration = show ? show.kind === 'scoreboard'
+    ? Math.max(13, Math.ceil(members.length / scoreboardCapacity(width, height)) * 3.5 + 1)
+    : takeoverSeconds(show.kind) : 0;
+  useEffect(() => { if (!show) return; const id = setTimeout(() => setShow(null), duration * 1000); return () => clearTimeout(id); }, [show, duration]);
   return <AnimatePresence>{show && <motion.div key={show.kind} className={`takeover takeover--${show.kind}`} initial={{ clipPath: 'polygon(0 0, 0 0, 0 100%, 0 100%)' }} animate={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' }} exit={{ opacity: 0 }} transition={{ duration: 0.55, ease: [0.7, 0, 0.3, 1] }}>
     {show.kind === 'spike' && <SpikeTakeover alerts={show.alerts} members={members}/>}
     {show.kind === 'scoreboard' && <Scoreboard/>}
@@ -197,7 +202,7 @@ export function Takeovers({ blocked }: { blocked: boolean }) {
     {show.kind === 'play' && <PlayOfTheDay item={show.item} members={members}/>}
     {show.kind === 'radar' && <ReviewRadar prs={show.prs} total={show.total}/>}
     {show.kind === 'recap' && <Recap season={show.season} members={members}/>}
-    <motion.span className="takeover-timer" initial={{ scaleX: 1 }} animate={{ scaleX: 0 }} transition={{ duration: takeoverSeconds(show.kind), ease: 'linear' }}/>
+    <motion.span className="takeover-timer" initial={{ scaleX: 1 }} animate={{ scaleX: 0 }} transition={{ duration, ease: 'linear' }}/>
   </motion.div>}</AnimatePresence>;
 }
 
@@ -299,6 +304,17 @@ function SpikeTakeover({ alerts, members }: { alerts: CiAlert[]; members: Member
 function Scoreboard() {
   const members = useStore(s => s.members), stats = useStore(s => s.stats), feed = useStore(s => s.feed), activeDays = useStore(s => s.activeDays);
   const ranked = rankBy(members, stats);
+  const { width, height } = useDisplaySize();
+  const capacity = scoreboardCapacity(width, height);
+  const pages = Math.max(1, Math.ceil(ranked.length / capacity));
+  const [page, setPage] = useState(0);
+  useEffect(() => {
+    setPage(0);
+    if (pages <= 1) return;
+    const timer = setInterval(() => setPage(p => (p + 1) % pages), 3500);
+    return () => clearInterval(timer);
+  }, [pages]);
+  const shown = ranked.slice((page % pages) * capacity, ((page % pages) + 1) * capacity);
   const hot = hotLogins(feed, Date.now());
   const perDay = (login: string) => { const s = stats[login]; const d = activeDays[login] || 0; return s && d ? Math.round(s.monthlyXp / d) : 0; };
   const cols: Array<{ key: string; label: string; value: (m: Member) => number; fmt?: (n: number, m: Member) => string }> = [
@@ -312,10 +328,11 @@ function Scoreboard() {
   const best = Object.fromEntries(cols.map(c => [c.key, Math.max(0, ...ranked.map(c.value))]));
   const last = (login: string) => { const t = feed.find(f => f.user === login)?.time || stats[login]?.lastActivityTime; return t ? elapsed(t, Date.now()) : '—'; };
   return <div className="tk-board">
-    <div className="tk-board-head"><span className="tk-kicker"><ArenaIcon name="users" size={18}/> SCOREBOARD · THIS MONTH</span><h1>Scoreboard</h1></div>
-    <div className="tk-table" style={{ gridTemplateRows: `auto repeat(${ranked.length}, minmax(0, 1fr))` }}>
+    <div className="tk-board-head"><span className="tk-kicker"><ArenaIcon name="users" size={18}/> SCOREBOARD · THIS MONTH</span><h1>Scoreboard</h1>{pages > 1 && <small className="tk-board-page">{page % pages + 1} / {pages}</small>}</div>
+    <div className="tk-table" style={{ gridTemplateRows: `auto repeat(${shown.length}, minmax(0, 1fr))` }}>
       <div className="tk-row tk-row--head"><span>#</span><span>Player</span>{cols.map(c => <span key={c.key}>{c.label}</span>)}<span>Last play</span></div>
-      {ranked.map((m, i) => {
+      {shown.map((m, row) => {
+        const i = (page % pages) * capacity + row;
         const xp = stats[m.login]?.monthlyXp || 0, tier = tierForRank(i, xp);
         return <motion.div key={m.login} className={`tk-row ${tier ? `tk-row--${tier}` : 'tk-row--unranked'}`} initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 + i * 0.05 }}>
           <span className="tk-rank">{tier ? <RankEmblem tier={tier} size={30}/> : null}<b>{i + 1}</b></span>
