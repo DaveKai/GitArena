@@ -10,6 +10,7 @@ import type { DevStats, FeedItem, Member, ShamePR } from './types';
 import { AnimatedScore, Avatar, RankEmblem, RankTierChip, UiSwitch, rankGap, tierForRank, elapsed, eventIcons, initials, number, type UiMode } from './components/shared';
 import { DisplaySettings, SettingsButton } from './components/DisplaySettings';
 import { goalDisplayKey, useDisplaySettings } from './store/useDisplaySettings';
+import { CompanionDirector } from './components/companion/useCompanion';
 import { ArenaSelectView } from './components/arena/ArenaSelectView';
 import { KillFeed, MatchPointChip, SpikeChip, OnFireChip, QuietScreen, Takeovers, hotLogins, seasonClock, useArenaMoments, useQuiet } from './components/extras';
 
@@ -196,6 +197,7 @@ export default function App() {
     <KillFeed lines={killLines} members={members}/>
     <Takeovers blocked={!!overlay || quiet || settingsOpen}/>
     <DisplaySettings/>
+    <CompanionDirector/>
     <AnimatePresence>{quiet && <QuietScreen now={now} until={quietUntil}/>}</AnimatePresence>
     {soundOn && audioBlocked && <div className="audio-blocked" role="status"><ArenaIcon name="mute" size={20}/><span><strong>SOUND IS BLOCKED BY THE BROWSER</strong>Click or press any key on this screen once to turn it on.</span></div>}
     {soundChoice === null && <SoundPrompt onChoice={chooseSound}/>}

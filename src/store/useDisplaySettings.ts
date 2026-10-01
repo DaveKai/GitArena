@@ -8,10 +8,12 @@ export interface DisplayPreferences {
   rotationSeconds: number;
   takeoverSeconds: number;
   calmMotion: boolean;
+  companionEnabled: boolean;
+  companionName: string;
 }
 export const DEFAULT_DISPLAY: DisplayPreferences = {
   scene: 'spaceship', missionName: 'Team mission', destinationName: 'New horizon',
-  goalLabels: {}, rotationSeconds: 6.5, takeoverSeconds: 300, calmMotion: false,
+  goalLabels: {}, rotationSeconds: 6.5, takeoverSeconds: 300, calmMotion: false, companionEnabled: true, companionName: 'Patch',
 };
 const KEY = 'gitarena-display-settings';
 export const goalDisplayKey = (goal: { metric: string; target: number }) => `${goal.metric}:${goal.target}`;
@@ -22,7 +24,7 @@ export function cleanDisplayPreferences(input: unknown): DisplayPreferences {
   return { scene: d.scene === 'city' ? 'city' : 'spaceship', missionName: text(d.missionName, DEFAULT_DISPLAY.missionName), destinationName: text(d.destinationName, DEFAULT_DISPLAY.destinationName), goalLabels: labels,
     rotationSeconds: [6.5,10,15].includes(Number(d.rotationSeconds)) ? Number(d.rotationSeconds) : 6.5,
     takeoverSeconds: [300,600,900].includes(Number(d.takeoverSeconds)) ? Number(d.takeoverSeconds) : 300,
-    calmMotion: d.calmMotion === true };
+    calmMotion: d.calmMotion === true, companionEnabled: d.companionEnabled !== false, companionName: text(d.companionName, 'Patch', 18) };
 }
 function read(): DisplayPreferences {
   try { return cleanDisplayPreferences(JSON.parse(localStorage.getItem(KEY) || '{}')); }

@@ -14,3 +14,4 @@
 .display-settings header { position:sticky; top:0; z-index:2; margin:-28px -28px 20px; padding:20px 28px; background:#19182c; border-bottom:1px solid #3c334f; }
 .display-settings footer { position:sticky; bottom:0; z-index:2; margin:0 -28px -28px; padding:18px 28px; background:#19182c; }
 @media(max-width:600px) { .display-settings header { margin:-20px -20px 20px; padding:16px 20px; }.display-settings footer { margin:0 -20px -20px; padding:14px 20px; } }
+.settings-fields .settings-pet-toggle { display:flex; align-items:center; gap:10px; align-self:center; }.settings-pet-toggle input { width:16px; height:16px; accent-color:#9a8fff; }.settings-pet-toggle small { display:block; font-size:10px; color:#9389aa; margin-top:4px; }

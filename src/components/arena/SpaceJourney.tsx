@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { ArenaIcon } from '../ui/ArenaIcon';
+import { SharedCompanion } from '../companion/SharedCompanion';
 import { Avatar } from '../shared';
 import { ENCOUNTERS, voyageState } from './voyage';
 import './space.css';
@@ -21,7 +22,7 @@ export function SpaceJourney({ now }: { now: number }) {
   const pct = Math.floor(voyage.percent + 1e-8);
   const id = useId().replace(/:/g, '');
   const last = feed[0];
-  const age = last ? now - Date.parse(last.time) : Infinity;
+  const age = last ? Math.max(now, Date.now()) - Date.parse(last.time) : Infinity;
   const recent = age >= 0 && age < 14000;
   const review = recent && last.type === 'review';
   const boosting = recent && ['commit', 'branch-push', 'pr-merged'].includes(last.type);
@@ -67,6 +68,7 @@ export function SpaceJourney({ now }: { now: number }) {
         <path d="M40 61 55 69m25-8-15 8" stroke="#ffc1ce" strokeWidth="4"/><path d="m52 86 8 10 8-10" fill="none" stroke="#ff6480" strokeWidth="3"/>
       </svg><div className="space-laser"/><div className="space-hit"/></>}
       {damaged && <><span className="space-spark space-spark-a"/><span className="space-spark space-spark-b"/></>}
+      <SharedCompanion world="spaceship" targetPercent={58}/>
       <div className="space-scene-footer"><span><i/>{status}</span><b>GA–01 / ODYSSEY</b></div>
       {moment && <div className="space-victory"><ArenaIcon name={arrived ? 'star' : 'shield'} size={28}/><strong>{moment}</strong><span>{arrived ? 'A new world, built together.' : 'The crew pushed through.'}</span></div>}
     </div>
