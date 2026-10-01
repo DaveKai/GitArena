@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react';
 
-export type IconName = 'arena' | 'git' | 'merge' | 'review' | 'issue' | 'trophy' | 'flame' | 'target' | 'chart' | 'volume' | 'mute' | 'medal' | 'clock' | 'users' | 'spark' | 'arrow' | 'shield' | 'check' | 'branch' | 'star' | 'alert' | 'expand' | 'code' | 'bolt' | 'lock' | 'hex' | 'layers';
+export type IconName = 'arena' | 'git' | 'merge' | 'review' | 'issue' | 'trophy' | 'flame' | 'target' | 'chart' | 'volume' | 'mute' | 'medal' | 'clock' | 'users' | 'spark' | 'arrow' | 'shield' | 'check' | 'branch' | 'star' | 'alert' | 'expand' | 'code' | 'bolt' | 'lock' | 'hex' | 'layers' | 'settings' | 'close' | 'city';
 
 const paths: Record<IconName, ReactNode> = {
+  settings: <><path d="m9 3-1 3-3 1v4l-2 1 2 2v3l3 1 1 3h6l1-3 3-1v-3l2-2-2-1V7l-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></>,
+  close: <path d="m6 6 12 12M18 6 6 18"/>,
+  city: <><path d="M3 21h18M4 21V9h6v12m0-16h7v16m0-8h4v8M6 12h2m-2 4h2m5-8h1m-1 4h1m-1 4h1"/></>,
   arena: <><path d="M4 19 12 3l8 16H4Z"/><path d="m8 15 4-8 4 8H8Z"/><path d="M3 21h18"/></>,
   git: <><circle cx="6" cy="5" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 5h4a6 6 0 0 1 6 6v-2"/></>,
   merge: <><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7v10m12 0v-4a6 6 0 0 0-6-6H8"/></>,

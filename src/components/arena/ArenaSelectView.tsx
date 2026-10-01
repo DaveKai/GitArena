@@ -9,6 +9,9 @@ import { MatchPointChip, SpikeChip, seasonClock } from '../extras';
 import type { DevStats, FeedItem, Member } from '../../types';
 import './arena.css';
 import { SpaceJourney } from './SpaceJourney';
+import { LivingCity } from './LivingCity';
+import { SettingsButton } from '../DisplaySettings';
+import { goalDisplayKey, useDisplaySettings } from '../../store/useDisplaySettings';
 
 /** Rotates through `count` positions on a timer; resets when `count` changes. */
 function useTicker(count: number, ms: number) {
@@ -33,6 +36,7 @@ function TopBar({ now, periodStart, isDemo, memberCount, soundOn, onSound, uiMod
     <span className="as-top-meta"><ArenaIcon name="users" size={17}/>{memberCount}</span>
     <span className="as-clock">{new Date(now).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })}<small>UTC</small></span>
     <UiSwitch mode={uiMode} onChange={onUiMode}/>
+    <SettingsButton arena/>
     <button className="as-sound" onClick={onSound} aria-label={soundOn ? 'Mute sound' : 'Enable sound'}><ArenaIcon name={soundOn ? 'volume' : 'mute'} size={19}/></button>
   </header>;
 }
@@ -106,7 +110,8 @@ function AgentCard({ member, s, rank, focused, rose, onFire, gap }: { member: Me
 
 function AgentCards({ ranked, stats, hot, fresh }: { ranked: Member[]; stats: Record<string, DevStats>; hot: Set<string>; fresh: Set<string> }) {
   const top = ranked.slice(0, 3), rest = ranked.slice(3);
-  const offset = useTicker(Math.max(1, rest.length), 6500);
+  const rotationSeconds = useDisplaySettings(s => s.preferences.rotationSeconds);
+  const offset = useTicker(Math.max(1, rest.length), rotationSeconds * 1000);
   const reduced = useReducedMotion();
   const previous = useRef<Record<string, number>>({});
   const [risen, setRisen] = useState<Record<string, boolean>>({});
@@ -162,6 +167,7 @@ function ArenaMoment({ overlay, onDone }: { overlay: { type: string; payload: Re
 
 export function ArenaSelectView({ now, hot, soundOn, onSound, uiMode, onUiMode }: { now: number; hot: Set<string>; soundOn: boolean; onSound: () => void; uiMode: UiMode; onUiMode: (mode: UiMode) => void }) {
   const members = useStore(s => s.members), stats = useStore(s => s.stats), feed = useStore(s => s.feed), bossProgress = useStore(s => s.bossProgress), bossIndex = useStore(s => s.bossIndex), bossGoals = useStore(s => s.bossGoals), isDemo = useStore(s => s.isDemo), periodStart = useStore(s => s.monthStartDate), overlay = useStore(s => s.overlayQueue[0]), popOverlay = useStore(s => s.popOverlay);
+  const settings = useDisplaySettings(s => s.preferences);
   const ranked = useMemo(() => rankBy(members, stats), [members, stats]);
   const fresh = useMemo(() => new Set(feed.filter(item => now - Date.parse(item.time) >= 0 && now - Date.parse(item.time) < 12000).map(item => item.user)), [feed, now]);
   const complete = bossGoals.length > 0 && bossIndex >= bossGoals.length;
@@ -169,8 +175,8 @@ export function ArenaSelectView({ now, hot, soundOn, onSound, uiMode, onUiMode }
   return <div className="theme-arena arena-voyage-layout">
     <TopBar now={now} periodStart={periodStart} isDemo={isDemo} memberCount={members.length} soundOn={soundOn} onSound={onSound} uiMode={uiMode} onUiMode={onUiMode}/>
     <aside className="as-rail"><PartyFeed feed={feed} members={members} now={now}/></aside>
-    <main className="as-main"><AgentCards ranked={ranked} stats={stats} hot={hot} fresh={fresh}/><LockInBar goal={goal} progress={complete ? 1 : bossProgress[goal.metric] || 0} complete={complete} goals={bossGoals.length} index={bossIndex}/></main>
-    <SpaceJourney now={now}/>
+    <main className="as-main"><AgentCards ranked={ranked} stats={stats} hot={hot} fresh={fresh}/><LockInBar goal={{...goal, label: settings.goalLabels[goalDisplayKey(goal)] || goal.label}} progress={complete ? 1 : bossProgress[goal.metric] || 0} complete={complete} goals={bossGoals.length} index={bossIndex}/></main>
+    {settings.scene === 'city' ? <LivingCity now={now}/> : <SpaceJourney now={now}/>}
     <AnimatePresence>{overlay && <ArenaMoment key={`${overlay.type}-${JSON.stringify(overlay.payload)}`} overlay={overlay} onDone={popOverlay}/>}</AnimatePresence>
   </div>;
 }

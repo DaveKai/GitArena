@@ -4,12 +4,14 @@ import { ArenaIcon } from '../ui/ArenaIcon';
 import { Avatar } from '../shared';
 import { ENCOUNTERS, voyageState } from './voyage';
 import './space.css';
+import { useDisplaySettings } from '../../store/useDisplaySettings';
 
 function Drone({ second = false }: { second?: boolean }) {
   return <svg className={`space-drone ${second ? 'space-drone-second' : ''}`} viewBox="0 0 60 40"><path d="M7 10h12l6 10-6 10H7l6-10ZM53 10H41l-6 10 6 10h12l-6-10Z" fill="#44388b" stroke="#a99bff"/><path d="m30 8 12 12-12 12-12-12Z" fill="#c8f9f6"/><circle cx="30" cy="20" r="5" fill="#6c5cf0"/></svg>;
 }
 
 export function SpaceJourney({ now }: { now: number }) {
+  const settings = useDisplaySettings(s => s.preferences);
   const goals = useStore(s => s.bossGoals), progress = useStore(s => s.bossProgress);
   const alerts = useStore(s => s.ciAlerts), feed = useStore(s => s.feed), month = useStore(s => s.monthStartDate);
   const demo = useStore(s => s.isDemo), members = useStore(s => s.members);
@@ -41,7 +43,7 @@ export function SpaceJourney({ now }: { now: number }) {
   return <section className={`space-journey ${boosting ? 'space-boost' : ''} ${damaged ? 'space-damage' : ''} ${review || repairing ? 'space-support' : ''} ${encounter ? 'space-combat' : ''}`} aria-label={`Team voyage ${pct}% complete`}>
     <div className="space-scene" aria-hidden="true">
       <div className="space-nebula"/><div className="space-stars"/><div className="space-planet"><i/><i/><i/></div>
-      <div className="space-coordinates">SECTOR {String(defeated + 1).padStart(2, '0')}<span>{encounter?.sector || (arrived ? 'New horizon' : 'Deep space')}</span></div>
+      <div className="space-coordinates">SECTOR {String(defeated + 1).padStart(2, '0')}<span>{encounter?.sector || (arrived ? settings.destinationName : 'Deep space')}</span></div>
       <svg className="space-ship" viewBox="0 0 320 180">
         <defs>
           <linearGradient id={`${id}-hull`} x2="0.9" y2="1"><stop stopColor="#ebe8ff"/><stop offset=".45" stopColor="#9285ce"/><stop offset="1" stopColor="#382d69"/></linearGradient>
@@ -69,8 +71,8 @@ export function SpaceJourney({ now }: { now: number }) {
       {moment && <div className="space-victory"><ArenaIcon name={arrived ? 'star' : 'shield'} size={28}/><strong>{moment}</strong><span>{arrived ? 'A new world, built together.' : 'The crew pushed through.'}</span></div>}
     </div>
     <div className="space-readout">
-      <div className="space-heading"><span className="space-kicker">TEAM VOYAGE / {month.slice(0, 7)}</span>{demo && <b className="space-demo">SIMULATION</b>}</div>
-      <h2>{arrived ? 'Orbit achieved' : encounter?.name || 'Beyond the horizon'}</h2>
+      <div className="space-heading"><span className="space-kicker">{settings.missionName} / {month.slice(0, 7)}</span>{demo && <b className="space-demo">SIMULATION</b>}</div>
+      <h2>{arrived ? 'Orbit achieved' : encounter?.name || settings.destinationName}</h2>
       <div className="space-status"><strong>{pct}<small>%</small></strong><span>{encounter ? 'BOSS ENCOUNTER' : `${defeated} / 3 HOSTILES CLEARED`}</span></div>
       <div className="space-route"><i style={{width: `${voyage.percent}%`}}/>{ENCOUNTERS.map(e => <b key={e.start} className={pct >= e.end ? 'cleared' : pct >= e.start ? 'active' : ''} style={{left: `${e.start}%`}}/>)}</div>
       {encounter ? <div className="space-boss-status"><span>HOSTILE HULL</span><div className="space-health"><i style={{width: `${health}%`}}/></div><b>{health}%</b></div> : <div className="space-next">{arrived ? 'MONTHLY MISSION COMPLETE' : `NEXT CONTACT / ${ENCOUNTERS.find(e => e.start > pct)?.start || 100}%`}</div>}

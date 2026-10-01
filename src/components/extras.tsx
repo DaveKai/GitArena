@@ -1,3 +1,4 @@
+import { useDisplaySettings } from '../store/useDisplaySettings';
 import { scoreboardCapacity, useDisplaySize } from '../hooks/useDisplaySize';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -169,6 +170,7 @@ type Takeover = NonNullable<ReturnType<typeof buildTakeover>>;
  * first days of a month. `?takeover=<kind>` previews one kind on a loop.
  */
 export function Takeovers({ blocked }: { blocked: boolean }) {
+  const takeoverInterval = useDisplaySettings(s => s.preferences.takeoverSeconds);
   const members = useStore(s => s.members);
   const { width, height } = useDisplaySize();
   const [show, setShow] = useState<Takeover | null>(null);
@@ -176,7 +178,7 @@ export function Takeovers({ blocked }: { blocked: boolean }) {
   blockedRef.current = blocked;
   useEffect(() => {
     const forced = order.includes(params().get('takeover') as Kind) ? params().get('takeover') as Kind : null;
-    const every = Math.max(20, Number(params().get('takeoverEvery')) || 300) * 1000;
+    const every = Math.max(20, Number(params().get('takeoverEvery')) || takeoverInterval) * 1000;
     const run = () => {
       if (blockedRef.current) return;
       const s = useStore.getState();
@@ -190,7 +192,7 @@ export function Takeovers({ blocked }: { blocked: boolean }) {
     const first = forced ? setTimeout(run, 4000) : undefined;
     const id = setInterval(run, forced ? 20000 : every);
     return () => { clearTimeout(first); clearInterval(id); };
-  }, []);
+  }, [takeoverInterval]);
   const duration = show ? show.kind === 'scoreboard'
     ? Math.max(13, Math.ceil(members.length / scoreboardCapacity(width, height)) * 3.5 + 1)
     : takeoverSeconds(show.kind) : 0;
