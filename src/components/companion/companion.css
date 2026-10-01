@@ -16,3 +16,22 @@
 @media(min-width:2500px) and (min-height:1200px) { .companion { width:120px; }.companion-avatar { width:120px; height:132px; }.companion-bubble { max-width:220px; padding:10px 14px; }.companion-bubble strong { font-size:11px; }.companion-bubble span { font-size:15px; }.companion-tag { font-size:9px; }.city-scene .companion-avatar { width:96px; height:106px; }.city-scene .companion-tag { font-size:8px; }.city-scene:has(.companion) .city-skyline { bottom:110px; }.city-scene:has(.companion) .city-street { height:90px; } }
 .companion-bubble span { min-width:0; overflow-wrap:anywhere; }
 .city-lot-repaired .city-building { border-color:#8df5f1; box-shadow:0 0 14px #8df5f144; }.city-lot-repaired .city-windows .lit { background:#8df5f1; box-shadow:0 0 8px #8df5f166; }.city-lot-repaired .city-building-label span { color:#8df5f1; }
+
+/* Walk, stop, work, return. The body faces its travel direction, text stays upright. */
+.companion { transition:left 2.6s cubic-bezier(.4,0,.2,1),bottom 2.6s cubic-bezier(.4,0,.2,1); }
+.companion--facing-left .companion-avatar > svg { transform:scaleX(-1); }
+.companion:not(.companion--moving) .companion-leg-left,.companion:not(.companion--moving) .companion-leg-right { animation:none; }
+.companion--moving .companion-leg-left { animation:companion-step .5s ease-in-out infinite; }.companion--moving .companion-leg-right { animation:companion-step .5s ease-in-out infinite reverse; }.companion--moving .companion-body { animation:companion-bob .5s ease-in-out infinite; }
+.companion:not(.companion--moving) .companion-body { animation:none; }
+.companion:not(.companion--working) .companion-arm-right,.companion:not(.companion--working) .companion-tool { animation:none; }
+.companion--repair.companion--working .companion-body { animation:companion-relieved 1s ease-out; }
+.companion--inspection.companion--working .companion-head { animation:companion-surprised .7s ease-out,companion-look 8s .7s ease-in-out infinite; }
+.companion-dock { position:absolute; z-index:3; width:86px; transform:translateX(-50%); pointer-events:none; }
+.companion-dock svg { display:block; width:100%; height:21px; }.companion-dock small { display:block; color:#6b627f; font:600 5px 'Geist Mono Variable',monospace; letter-spacing:.08em; text-align:center; margin-top:2px; }.companion-dock-ring { opacity:.35; }.companion-dock.is-occupied .companion-dock-ring { opacity:.9; filter:drop-shadow(0 0 5px #8df5f188); animation:companion-charge 3s ease-in-out infinite; }
+.companion--phase-charge .companion-avatar,.companion--phase-rest .companion-avatar { animation:none; }.companion--phase-charge .companion-beacon { animation:companion-charge 2s ease-in-out infinite; }.companion--phase-rest .companion-tag { opacity:.5; }
+@keyframes companion-charge { 50% { opacity:.35; } }@keyframes companion-surprised { 35% { transform:translateY(-3px) rotate(-6deg); } }@keyframes companion-relieved { 25% { transform:translateY(-6px) rotate(5deg); }50% { transform:translateY(0) rotate(-3deg); } }
+@media(min-width:2500px) and (min-height:1200px) { .companion-dock { width:135px; }.companion-dock svg { height:32px; }.companion-dock small { font-size:8px; } }
+@media(prefers-reduced-motion:reduce) { .companion,.companion *,.companion-dock * { transition:none!important; animation:none!important; } }
+.ship-station-labels { position:absolute; bottom:58px; left:24%; right:10%; display:flex; justify-content:space-between; color:#75688f; font:600 6px 'Geist Mono Variable',monospace; letter-spacing:.1em; pointer-events:none; }
+.ui-root--calm .companion { transition:none; }
+@media(min-width:2500px) and (min-height:1200px) { .ship-station-labels { font-size:10px; bottom:95px; } }

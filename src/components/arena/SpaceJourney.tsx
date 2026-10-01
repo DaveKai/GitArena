@@ -68,6 +68,7 @@ export function SpaceJourney({ now }: { now: number }) {
         <path d="M40 61 55 69m25-8-15 8" stroke="#ffc1ce" strokeWidth="4"/><path d="m52 86 8 10 8-10" fill="none" stroke="#ff6480" strokeWidth="3"/>
       </svg><div className="space-laser"/><div className="space-hit"/></>}
       {damaged && <><span className="space-spark space-spark-a"/><span className="space-spark space-spark-b"/></>}
+      {settings.companionEnabled && <div className="ship-station-labels" aria-hidden="true"><span>ENGINE BAY</span><span>REPAIR BAY</span><span>FLIGHT DECK</span></div>}
       <SharedCompanion world="spaceship" targetPercent={58}/>
       <div className="space-scene-footer"><span><i/>{status}</span><b>GA–01 / ODYSSEY</b></div>
       {moment && <div className="space-victory"><ArenaIcon name={arrived ? 'star' : 'shield'} size={28}/><strong>{moment}</strong><span>{arrived ? 'A new world, built together.' : 'The crew pushed through.'}</span></div>}

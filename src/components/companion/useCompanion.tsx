@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { useStore } from '../../store/useStore';
 import { useDisplaySettings } from '../../store/useDisplaySettings';
 import { ciTransitions, feedMoment, type CompanionMoment } from './events';
+import { COMPANION_TRIP_MS } from './route';
 import type { CiAlert } from '../../types';
 interface CompanionState { moment: CompanionMoment | null; lastActionAt: number; }
 export const useCompanion = create<CompanionState>(() => ({moment:null, lastActionAt:Date.now()}));
@@ -36,7 +37,7 @@ export function CompanionDirector() {
   }, [enabled, queue, moment]);
   useEffect(() => {
     if (!moment) return;
-    const timer = setTimeout(() => useCompanion.setState({moment:null,lastActionAt:Date.now()}), 6500);
+    const timer = setTimeout(() => useCompanion.setState({moment:null,lastActionAt:Date.now()}), COMPANION_TRIP_MS);
     return () => clearTimeout(timer);
   }, [moment]);
   return null;
