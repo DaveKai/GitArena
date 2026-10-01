@@ -183,7 +183,7 @@
 }
 @media(max-width:1050px) {
   .tk-board { padding:18px; }.tk-board-head h1 { font-size:48px; }.tk-kicker { font-size:11px; letter-spacing:.1em; }
-  .tk-row { grid-template-columns:55px minmax(0,2fr) repeat(5,minmax(0,1fr)); gap:6px; }.tk-row > span:nth-child(7),.tk-row > span:nth-child(9) { display:none; }.tk-num { font-size:15px; }.tk-player strong { font-size:20px; }.tk-player .arena-avatar { width:26px; height:26px; }.tk-rank svg { width:22px; height:22px; }.tk-rank { gap:5px; }.tk-rank b { font-size:20px; }
+  .tk-row { grid-template-columns:55px minmax(0,2fr) repeat(5,minmax(0,1fr)); gap:6px; }.tk-row > span:nth-child(7),.tk-row > span:nth-child(9) { display:none; }.tk-num { font-size:15px; }.tk-player strong { font-size:20px; }.tk-player .arena-avatar { width:26px; height:26px; }.tk-rank .rank-emblem { width:22px; height:22px; }.tk-rank { gap:5px; }.tk-rank b { font-size:20px; }
   .tk-radar,.tk-spike { grid-template-columns:1fr; padding:24px; gap:16px; }.tk-scope,.tk-spike-icon { display:none; }.tk-radar-list { max-width:100%; }.tk-pr { min-width:0; }.tk-radar-list em { font-size:16px; }
   .tk-side-copy h2 { font-size:clamp(26px,7vw,64px); max-width:100%; overflow:hidden; text-overflow:ellipsis; }.tk-side--a .tk-side-copy { left:24px; right:10px; }.tk-side--b .tk-side-copy { right:24px; left:10px; }.tk-side-copy b { font-size:24px; }.tk-vs-mark { font-size:clamp(80px,16vw,160px); }.tk-caption { font-size:14px; }
   .tk-play-card { grid-template-columns:100px minmax(0,1fr); padding:16px; gap:16px; }.tk-play-art { width:100px; height:100px; }.tk-play-card > b { grid-column:2; font-size:56px; }.tk-play-copy span { font-size:15px; }.tk-play-copy small { font-size:12px; }.tk-play-copy strong { white-space:normal; }
@@ -193,7 +193,7 @@
 }
 @media(max-width:600px) {
   .tk-row { grid-template-columns:42px minmax(0,2fr) minmax(45px,1fr) minmax(38px,.7fr) 64px; gap:5px; padding-inline:6px; }
-  .tk-row > span:nth-child(4),.tk-row > span:nth-child(6),.tk-row > span:nth-child(8) { display:none; }.tk-row > span:nth-child(9) { display:block; }.tk-num { font-size:13px; }.tk-last { font-size:8px; }.tk-player .arena-avatar,.tk-player .tk-hot,.tk-player small { display:none; }.tk-player strong { font-size:18px; }.tk-row--head { font-size:8px; }.tk-rank svg { width:18px; height:18px; }.tk-rank { gap:2px; }
+  .tk-row > span:nth-child(4),.tk-row > span:nth-child(6),.tk-row > span:nth-child(8) { display:none; }.tk-row > span:nth-child(9) { display:block; }.tk-num { font-size:13px; }.tk-last { font-size:8px; }.tk-player .arena-avatar,.tk-player .tk-hot,.tk-player small { display:none; }.tk-player strong { font-size:18px; }.tk-row--head { font-size:8px; }.tk-rank .rank-emblem { width:18px; height:18px; }.tk-rank { gap:2px; }
   .tk-play-card { grid-template-columns:70px minmax(0,1fr); gap:12px; }.tk-play-art { width:70px; height:70px; }.tk-play h1 { font-size:64px; }.tk-play-card > b { font-size:48px; }
   .tk-recap { padding-top:24px; }.tk-recap h1 { font-size:48px; }.tk-podium { width:94%; gap:8px; }.tk-step { gap:8px; }.tk-step strong { font-size:18px; }.tk-step > b { font-size:13px; }.tk-block span { font-size:48px; }.tk-step--radiant .tk-block { height:140px; }.tk-step--immortal .tk-block { height:110px; }.tk-step--ascendant .tk-block { height:90px; }.tk-award { padding:10px; gap:3px; }.tk-award strong { font-size:18px; }.tk-award span { font-size:8px; }.tk-award b { font-size:12px; }
   .quiet-clock { font-size:70px; }.quiet-drift { max-width:48vw; }.quiet-meta { font-size:10px; }
