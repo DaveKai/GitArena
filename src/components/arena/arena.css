@@ -436,3 +436,55 @@
   .as-season-copy small { font-size:10px; letter-spacing:.05em; }
   .as-ring { width:64px; height:64px; margin-left:8px; }
 }
+
+/* Arena experiment: standings, pulse and one shared voyage. */
+.theme-arena.arena-voyage-layout {
+  grid-template-columns:clamp(280px,19vw,360px) minmax(0,1fr);
+  grid-template-rows:58px minmax(0,1fr) clamp(240px,25vh,330px);
+  grid-template-areas:"top top" "rail main" "player player";
+}
+.arena-voyage-layout .as-rail { grid-template-rows:minmax(0,1fr); }
+.arena-voyage-layout .as-select { grid-template-rows:44px minmax(0,1fr); }
+.arena-voyage-layout .as-card.is-focused { transform:none; box-shadow:0 0 0 1px var(--tier),0 0 18px rgba(var(--tier-rgb),.25); }
+.arena-voyage-layout .as-card.is-leader { box-shadow:none; }
+.arena-voyage-layout .as-card--top { box-shadow:none; }
+.arena-voyage-layout .as-card.is-leader::after { display:none; }
+.arena-voyage-layout .as-card-top .rank-emblem { animation:none; filter:drop-shadow(0 2px 4px #0008); }
+.arena-voyage-layout .as-lockin.is-complete .as-lockin-button,.arena-voyage-layout .as-lockin-fill::after { animation:none; }
+.as-season-strip { display:grid; gap:4px; padding-left:18px; border-left:1px solid var(--as-edge); min-width:0; }
+.as-season-strip strong { text-transform:uppercase; font:700 14px/1 var(--as-mono); color:#d2cbea; }
+.as-season-strip span { display:flex; align-items:center; gap:8px; white-space:nowrap; font:600 10px/1 var(--as-mono); color:var(--as-muted); letter-spacing:.05em; }
+.as-season-strip i { width:3px; height:3px; background:#786d9f; transform:rotate(45deg); }
+.as-rotation-slot { grid-column:span 2; position:relative; min-width:0; min-height:0; }
+.as-rotation-pair { position:absolute; inset:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(9px,.8vw,14px); }
+@media (min-width:1051px) and (max-height:950px) {
+  .theme-arena.arena-voyage-layout { grid-template-rows:46px minmax(0,1fr) 230px; }
+  .arena-voyage-layout .as-select { grid-template-rows:36px minmax(0,1fr); }
+}
+@media (min-width:1051px) and (max-height:650px) {
+  .theme-arena.arena-voyage-layout { grid-template-rows:40px minmax(0,1fr) 180px; }
+  .arena-voyage-layout .as-select { grid-template-rows:28px minmax(0,1fr); }
+}
+@media (min-width:2500px) and (min-height:1200px) {
+  .theme-arena.arena-voyage-layout { grid-template-columns:480px minmax(0,1fr); grid-template-rows:84px minmax(0,1fr) clamp(330px,25vh,500px); }
+  .arena-voyage-layout .as-select { grid-template-rows:60px minmax(0,1fr); }
+  .as-season-strip strong { font-size:22px; }.as-season-strip span { font-size:15px; }
+}
+@media (min-width:1051px) and (max-aspect-ratio:1/1) {
+  .theme-arena.arena-voyage-layout { grid-template-columns:30% minmax(0,1fr); grid-template-rows:64px minmax(400px,1fr) 400px; }
+}
+@media (max-width:1050px) {
+  .theme-arena.arena-voyage-layout { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto 430px auto; grid-template-areas:"top" "main" "rail" "player"; }
+  .arena-voyage-layout .as-select { grid-template-rows:auto auto; }
+  .arena-voyage-layout .as-cards > .as-card:first-child { grid-column:span 2; }
+  .as-rotation-slot { height:340px; }.as-rotation-pair { gap:12px; }
+  .as-season-strip { margin-left:auto; }
+}
+@media (max-width:600px) {
+  .as-season-strip { padding-left:10px; }.as-season-strip strong { font-size:11px; }.as-season-strip span { font-size:8px; gap:4px; }
+  .as-rotation-slot { height:300px; }.as-rotation-pair { gap:12px; }
+  .arena-voyage-layout .as-select-head span { max-width:130px; }
+}
+.arena-voyage-layout .as-card.is-focused.is-leader { box-shadow:0 0 0 1px var(--tier),0 0 18px rgba(var(--tier-rgb),.25); }
+.arena-voyage-layout .as-card.is-onfire .as-card-art::before { animation:none; opacity:.35; }
+.arena-voyage-layout .as-card-fire { animation:none; }

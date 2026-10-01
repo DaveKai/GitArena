@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { ArenaIcon } from '../ui/ArenaIcon';
+import { Avatar } from '../shared';
 import { ENCOUNTERS, voyageState } from './voyage';
 import './space.css';
 
@@ -11,7 +12,8 @@ function Drone({ second = false }: { second?: boolean }) {
 export function SpaceJourney({ now }: { now: number }) {
   const goals = useStore(s => s.bossGoals), progress = useStore(s => s.bossProgress);
   const alerts = useStore(s => s.ciAlerts), feed = useStore(s => s.feed), month = useStore(s => s.monthStartDate);
-  const demo = useStore(s => s.isDemo);
+  const demo = useStore(s => s.isDemo), members = useStore(s => s.members);
+  const crew = feed.filter((item, index) => feed.findIndex(other => other.user === item.user) === index).slice(0, 3);
   const voyage = voyageState(goals, progress);
   const { encounter, health, defeated, arrived } = voyage;
   const pct = Math.floor(voyage.percent + 1e-8);
@@ -74,5 +76,8 @@ export function SpaceJourney({ now }: { now: number }) {
       {encounter ? <div className="space-boss-status"><span>HOSTILE HULL</span><div className="space-health"><i style={{width: `${health}%`}}/></div><b>{health}%</b></div> : <div className="space-next">{arrived ? 'MONTHLY MISSION COMPLETE' : `NEXT CONTACT / ${ENCOUNTERS.find(e => e.start > pct)?.start || 100}%`}</div>}
       <p>{!voyage.configured ? 'Awaiting team objectives.' : damaged ? `CI needs attention in ${alerts[0].repo}.` : repairing ? 'Build restored. Repair drones returning.' : review ? 'Review received. Support drones deployed.' : boosting ? 'Fresh activity. Engines burning.' : 'Team objectives power our flight.'}</p>
     </div>
+    <aside className="space-crew"><span className="space-kicker">RECENT CREW CONTRIBUTIONS</span>
+      {crew.length ? crew.map(item => <div className="space-crew-row" key={item.id}><Avatar member={members.find(m => m.login === item.user)}/><div><strong>{members.find(m => m.login === item.user)?.name || item.user}</strong><span>{item.type === 'review' ? 'Shields reinforced' : item.type === 'pr-merged' ? 'Flight path cleared' : item.type === 'commit' || item.type === 'branch-push' ? 'Engines powered' : 'Mission support'} · {item.repo || 'Team'}</span></div><ArenaIcon name={item.type === 'review' ? 'shield' : item.type === 'pr-merged' ? 'merge' : 'bolt'} size={18}/></div>) : <p>Waiting for the crew’s first move.</p>}
+    </aside>
   </section>;
 }
